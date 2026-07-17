@@ -1,13 +1,14 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.enums import (
     OTPPurpose,
     OTPStatus,
     SessionStatus,
+    UserRole,
 )
 from app.modules.auth.models import (
     OTPChallenge,
@@ -110,6 +111,45 @@ class UserRepository:
         result = await self.session.execute(statement)
 
         return result.scalar_one_or_none()
+
+    async def get_by_email_for_update(self, email: str) -> User | None:
+        statement = (
+            select(User)
+            .where(User.email == normalize_email(email))
+            .with_for_update()
+        )
+        result = await self.session.execute(statement)
+        return result.scalar_one_or_none()
+
+    async def get_super_admins(self, *, for_update: bool = False) -> list[User]:
+        statement = select(User).where(User.role == UserRole.SUPER_ADMIN)
+        if for_update:
+            statement = statement.with_for_update()
+        result = await self.session.execute(statement)
+        return list(result.scalars().all())
+
+    async def acquire_super_admin_bootstrap_lock(self) -> None:
+        """Serialize bootstrap attempts, including when no row exists yet."""
+
+        await self.session.execute(
+            text("SELECT pg_advisory_xact_lock(731947201)")
+        )
+
+    async def list_platform_admins(
+        self, *, limit: int, offset: int
+    ) -> tuple[list[User], int]:
+        roles = (UserRole.ADMIN, UserRole.SUPER_ADMIN)
+        items_result = await self.session.execute(
+            select(User)
+            .where(User.role.in_(roles))
+            .order_by(User.created_at.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+        total_result = await self.session.execute(
+            select(func.count()).select_from(User).where(User.role.in_(roles))
+        )
+        return list(items_result.scalars().all()), int(total_result.scalar_one())
 
     def add(self, user: User) -> None:
         self.session.add(user)

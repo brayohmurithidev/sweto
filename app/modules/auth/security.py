@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pwdlib import PasswordHash
 
+from app.modules.auth.exceptions import PasswordPolicyViolationError
+
 password_hash = PasswordHash.recommended()
 
 
@@ -36,6 +38,15 @@ def password_needs_rehash(password_hash_value: str) -> bool:
         return password_hash.current_hasher.check_needs_rehash(password_hash_value)
     except (TypeError, ValueError):
         return True
+
+
+def validate_password_policy(password: str) -> None:
+    """Enforce the shared policy for human passwords."""
+
+    if len(password) < 12 or len(password) > 128 or not password.strip():
+        raise PasswordPolicyViolationError(
+            "The password must be between 12 and 128 non-blank characters."
+        )
 
 
 def generate_numeric_otp(length: int) -> str:

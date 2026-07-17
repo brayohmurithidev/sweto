@@ -27,7 +27,6 @@ from app.modules.auth.exceptions import (
     OTPChallengeNotFoundError,
     OTPResendCooldownError,
     PasswordLoginNotAvailableError,
-    PasswordPolicyViolationError,
     PasswordReuseNotAllowedError,
     RefreshSessionExpiredError,
     RefreshSessionRevokedError,
@@ -67,6 +66,7 @@ from app.modules.auth.security import (
     hash_password,
     normalize_email,
     password_needs_rehash,
+    validate_password_policy,
     verify_otp_hash,
     verify_password,
 )
@@ -138,10 +138,7 @@ class AuthenticationService:
 
     @staticmethod
     def _validate_new_password(password: str) -> None:
-        if len(password) < 12 or len(password) > 128 or not password.strip():
-            raise PasswordPolicyViolationError(
-                "The new password must be between 12 and 128 non-blank characters."
-            )
+        validate_password_policy(password)
 
     @staticmethod
     def _build_user_data(user: User) -> AuthenticatedUserData:

@@ -55,6 +55,11 @@ class AuthEventType(StrEnum):
     LOGIN_SUCCEEDED = "login_succeeded"
     LOGIN_DENIED = "login_denied"
     PASSWORD_CHANGED = "password_changed"
+    SUPER_ADMIN_BOOTSTRAPPED = "super_admin_bootstrapped"
+    ADMIN_CREATED = "admin_created"
+    ADMIN_STATUS_CHANGED = "admin_status_changed"
+    ADMIN_ROLE_CHANGED = "admin_role_changed"
+    ADMIN_OPERATION_BLOCKED = "admin_operation_blocked"
 
     TOKEN_REFRESHED = "token_refreshed"
     TOKEN_REFRESH_FAILED = "token_refresh_failed"

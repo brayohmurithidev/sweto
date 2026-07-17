@@ -1,6 +1,18 @@
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 
+from app.modules.admin.exceptions import (
+    AdminEmailAlreadyExistsError,
+    AdminError,
+    AdminNotFoundError,
+    InvalidAdminRoleChangeError,
+    InvalidAdminStatusError,
+    PlatformRoleRequiredError,
+    ProtectedSystemUserError,
+    SelfAdministrationNotAllowedError,
+    SuperAdminConfigurationError,
+    SuperAdminIntegrityError,
+)
 from app.modules.auth.exceptions import (
     AccessTokenExpiredError,
     AuthenticationRateLimitError,
@@ -59,6 +71,27 @@ def error_response(
         },
         headers=headers,
     )
+
+
+async def admin_error_handler(_: Request, exception: Exception) -> JSONResponse:
+    if not isinstance(exception, AdminError):
+        raise exception
+    mappings: dict[type[AdminError], tuple[int, str]] = {
+        AdminEmailAlreadyExistsError: (409, "ADMIN_EMAIL_ALREADY_EXISTS"),
+        AdminNotFoundError: (404, "ADMIN_NOT_FOUND"),
+        PlatformRoleRequiredError: (403, "PLATFORM_ROLE_REQUIRED"),
+        ProtectedSystemUserError: (403, "PROTECTED_SYSTEM_USER"),
+        SelfAdministrationNotAllowedError: (
+            403,
+            "SELF_ADMINISTRATION_NOT_ALLOWED",
+        ),
+        InvalidAdminStatusError: (422, "INVALID_ADMIN_STATUS"),
+        InvalidAdminRoleChangeError: (422, "INVALID_ADMIN_ROLE_CHANGE"),
+        SuperAdminIntegrityError: (409, "SUPER_ADMIN_INTEGRITY_ERROR"),
+        SuperAdminConfigurationError: (422, "SUPER_ADMIN_CONFIGURATION_ERROR"),
+    }
+    status_code, code = mappings.get(type(exception), (400, "ADMIN_ERROR"))
+    return error_response(status_code=status_code, code=code, message=str(exception))
 
 
 async def invalid_phone_number_handler(

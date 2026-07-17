@@ -7,6 +7,7 @@ from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.exceptions import (
     access_token_expired_handler,
+    admin_error_handler,
     amenity_not_found_handler,
     authentication_rate_limit_handler,
     current_password_incorrect_handler,
@@ -37,6 +38,17 @@ from app.core.exceptions import (
 )
 from app.core.redis import close_redis
 from app.database.session import engine
+from app.modules.admin.exceptions import (
+    AdminEmailAlreadyExistsError,
+    AdminNotFoundError,
+    InvalidAdminRoleChangeError,
+    InvalidAdminStatusError,
+    PlatformRoleRequiredError,
+    ProtectedSystemUserError,
+    SelfAdministrationNotAllowedError,
+    SuperAdminConfigurationError,
+    SuperAdminIntegrityError,
+)
 from app.modules.auth.exceptions import (
     AccessTokenExpiredError,
     AuthenticationRateLimitError,
@@ -110,6 +122,18 @@ def create_application() -> FastAPI:
     )
 
     application.include_router(api_router)
+    for admin_exception in (
+        AdminEmailAlreadyExistsError,
+        AdminNotFoundError,
+        PlatformRoleRequiredError,
+        ProtectedSystemUserError,
+        SelfAdministrationNotAllowedError,
+        InvalidAdminStatusError,
+        InvalidAdminRoleChangeError,
+        SuperAdminIntegrityError,
+        SuperAdminConfigurationError,
+    ):
+        application.add_exception_handler(admin_exception, admin_error_handler)
     application.add_exception_handler(
         InvalidPhoneNumberError,
         invalid_phone_number_handler,

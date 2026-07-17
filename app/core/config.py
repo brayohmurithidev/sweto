@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     password_login_ip_limit: int = 20
     password_login_ip_window_seconds: int = 900
 
+    sweto_super_admin_email: str | None = None
+    sweto_super_admin_password: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore", case_sensitive=False
     )
