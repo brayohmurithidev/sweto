@@ -562,14 +562,43 @@ class GymVerificationDocumentData(BaseModel):
     id: UUID
     document_type: GymVerificationDocumentType
     document_name: str
+    storage_bucket: str | None
     storage_key: str
-    file_url: str | None
     mime_type: str
     file_size_bytes: int
+    etag: str | None
     is_active: bool
     uploaded_by_user_id: UUID
     created_at: datetime
     updated_at: datetime
+
+
+class GymVerificationUploadRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=200)
+    mime_type: str = Field(min_length=3, max_length=100)
+    file_size_bytes: int = Field(ge=1)
+
+    @field_validator("filename", "mime_type")
+    @classmethod
+    def strip_upload_fields(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Upload fields cannot be blank.")
+        return normalized
+
+
+class GymVerificationUploadData(BaseModel):
+    upload_id: UUID
+    method: str = "PUT"
+    upload_url: str
+    required_headers: dict[str, str]
+    expires_at: datetime
+    storage_key: str
+
+
+class GymVerificationDownloadData(BaseModel):
+    download_url: str
+    expires_at: datetime
 
 
 class GymVerificationData(BaseModel):

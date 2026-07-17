@@ -801,6 +801,11 @@ class GymVerificationDocument(
         nullable=False,
     )
 
+    storage_bucket: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
     file_url: Mapped[str | None] = mapped_column(
         String(1000),
         nullable=True,
@@ -814,6 +819,11 @@ class GymVerificationDocument(
     file_size_bytes: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
+    )
+
+    etag: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
     )
 
     is_active: Mapped[bool] = mapped_column(

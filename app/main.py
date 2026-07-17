@@ -35,6 +35,7 @@ from app.core.exceptions import (
     refresh_session_expired_handler,
     refresh_session_revoked_handler,
     session_not_found_handler,
+    storage_error_handler,
     user_access_denied_handler,
 )
 from app.core.redis import close_redis
@@ -93,6 +94,7 @@ from app.modules.gyms.exceptions import (
 from app.modules.profiles.exceptions import (
     InvalidProfileUpdateError,
 )
+from app.storage.exceptions import StorageError
 
 settings = get_settings()
 
@@ -285,6 +287,7 @@ def create_application() -> FastAPI:
         GymSlugConflictError,
         gym_slug_conflict_handler,
     )
+    application.add_exception_handler(StorageError, storage_error_handler)
 
     application.add_exception_handler(
         AmenityNotFoundError,

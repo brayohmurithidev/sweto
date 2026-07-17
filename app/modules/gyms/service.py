@@ -1,5 +1,5 @@
-from datetime import UTC, datetime
-from uuid import UUID
+from datetime import UTC, datetime, timedelta
+from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,10 +69,13 @@ from app.modules.gyms.schemas import (
     GymPricingData,
     GymVerificationData,
     GymVerificationDocumentData,
+    GymVerificationDownloadData,
     GymVerificationListData,
     GymVerificationReviewData,
     GymVerificationReviewRequest,
     GymVerificationSummaryData,
+    GymVerificationUploadData,
+    GymVerificationUploadRequest,
     UpdateGymAmenitiesData,
     UpdateGymAmenitiesRequest,
     UpdateGymBusinessDetailsData,
@@ -97,6 +100,21 @@ from app.modules.profiles.repository import (
     UserAccountRoleRepository,
     UserProfileRepository,
 )
+from app.storage.enums import UploadPurpose, UploadStatus
+from app.storage.exceptions import (
+    StorageNotConfiguredError,
+    StorageObjectNotFoundError,
+    StorageObjectSizeMismatchError,
+    StorageObjectTypeMismatchError,
+    StorageUploadAlreadyCompletedError,
+    StorageUploadExpiredError,
+    StorageUploadFailedError,
+    StorageUploadNotFoundError,
+)
+from app.storage.keys import ALLOWED_EXTENSION_BY_MIME_TYPE, build_gym_verification_key
+from app.storage.models import StorageUpload
+from app.storage.repository import StorageUploadRepository
+from app.storage.s3 import S3Storage
 
 
 class GymService:
@@ -107,6 +125,7 @@ class GymService:
         *,
         session: AsyncSession,
         default_phone_region: str,
+        storage: S3Storage | None = None,
     ) -> None:
         self.session = session
         self.default_phone_region = default_phone_region
@@ -119,6 +138,8 @@ class GymService:
         self.profile_repository = UserProfileRepository(session)
         self.role_repository = UserAccountRoleRepository(session)
         self.verification_repository = GymVerificationRepository(session)
+        self.storage_upload_repository = StorageUploadRepository(session)
+        self.storage = storage
         self.audit_logger = AuthAuditLogger(session)
 
     async def create_gym(
@@ -853,6 +874,249 @@ class GymService:
 
         return self._build_verification_document_data(document)
 
+    async def initiate_verification_upload(
+        self,
+        *,
+        user_id: UUID,
+        gym_id: UUID,
+        document_type: GymVerificationDocumentType,
+        payload: GymVerificationUploadRequest,
+    ) -> GymVerificationUploadData:
+        """Create an upload intent and a private, short-lived S3 PUT URL."""
+
+        gym = await self._require_verification_manager(
+            user_id=user_id, gym_id=gym_id, lock=True
+        )
+        self._validate_upload_metadata(
+            payload.filename, payload.mime_type, payload.file_size_bytes
+        )
+        storage = self._require_storage()
+        upload_id = uuid4()
+        key = build_gym_verification_key(
+            gym_id=gym.id,
+            document_type=document_type,
+            upload_id=upload_id,
+            mime_type=payload.mime_type,
+        )
+        presigned = await storage.create_upload_url(
+            key=key, mime_type=payload.mime_type
+        )
+        upload = StorageUpload(
+            id=upload_id,
+            bucket=storage.bucket,
+            storage_key=key,
+            purpose=UploadPurpose.GYM_VERIFICATION_DOCUMENT,
+            owner_user_id=user_id,
+            gym_id=gym.id,
+            document_type=document_type,
+            original_filename=payload.filename,
+            declared_mime_type=payload.mime_type,
+            declared_size_bytes=payload.file_size_bytes,
+            status=UploadStatus.PENDING,
+            expires_at=datetime.now(UTC) + timedelta(minutes=15),
+        )
+        self.storage_upload_repository.add(upload)
+        self.audit_logger.record(
+            event_type=AuthEventType.STORAGE_UPLOAD_INITIATED,
+            outcome=AuthEventOutcome.SUCCESS,
+            user_id=user_id,
+            metadata={
+                "upload_id": str(upload_id),
+                "gym_id": str(gym.id),
+                "document_type": document_type.value,
+                "storage_key": key,
+                "declared_size": payload.file_size_bytes,
+            },
+        )
+        await self.session.commit()
+        return GymVerificationUploadData(
+            upload_id=upload_id,
+            upload_url=presigned.url,
+            required_headers={"Content-Type": payload.mime_type},
+            expires_at=presigned.expires_at,
+            storage_key=key,
+        )
+
+    async def complete_verification_upload(
+        self,
+        *,
+        user_id: UUID,
+        gym_id: UUID,
+        document_type: GymVerificationDocumentType,
+        upload_id: UUID,
+    ) -> GymVerificationDocumentData:
+        storage = self._require_storage()
+        upload = await self.storage_upload_repository.get_for_update(upload_id)
+        if upload is None:
+            raise StorageUploadNotFoundError("The upload intent was not found.")
+        if upload.gym_id != gym_id or upload.document_type != document_type:
+            raise StorageUploadNotFoundError("The upload intent was not found.")
+        await self._require_verification_manager(
+            user_id=user_id, gym_id=gym_id, lock=True
+        )
+        if upload.status == UploadStatus.COMPLETED:
+            document = await self.verification_repository.get_document_by_type(
+                gym_id=gym_id, document_type=document_type
+            )
+            if document is None:
+                raise StorageUploadAlreadyCompletedError(
+                    "The upload is already completed."
+                )
+            return self._build_verification_document_data(document)
+        if upload.status != UploadStatus.PENDING:
+            raise StorageUploadFailedError("This upload can no longer be completed.")
+        if upload.expires_at < datetime.now(UTC):
+            upload.status = UploadStatus.EXPIRED
+            await self.session.commit()
+            raise StorageUploadExpiredError("This upload intent has expired.")
+        try:
+            metadata = await storage.head_object(key=upload.storage_key)
+            if metadata.content_length != upload.declared_size_bytes:
+                raise StorageObjectSizeMismatchError(
+                    "The uploaded object size does not match."
+                )
+            if metadata.content_type != upload.declared_mime_type:
+                raise StorageObjectTypeMismatchError(
+                    "The uploaded object type does not match."
+                )
+            self._validate_upload_metadata(
+                upload.original_filename, metadata.content_type, metadata.content_length
+            )
+        except (
+            StorageObjectNotFoundError,
+            StorageObjectSizeMismatchError,
+            StorageObjectTypeMismatchError,
+            StorageUploadFailedError,
+            GymVerificationDocumentInvalidError,
+        ):
+            upload.status = UploadStatus.FAILED
+            try:
+                await storage.delete_object(key=upload.storage_key)
+            except Exception:
+                pass
+            await self.session.commit()
+            raise
+        (
+            document,
+            old_key,
+        ) = await self.verification_repository.create_or_replace_document_from_storage(
+            gym_id=gym_id,
+            user_id=user_id,
+            document_type=document_type,
+            document_name=upload.original_filename,
+            bucket=storage.bucket,
+            storage_key=upload.storage_key,
+            mime_type=metadata.content_type,
+            file_size_bytes=metadata.content_length,
+            etag=metadata.etag,
+        )
+        upload.status = UploadStatus.COMPLETED
+        upload.etag = metadata.etag
+        upload.verified_mime_type = metadata.content_type
+        upload.verified_size_bytes = metadata.content_length
+        upload.completed_at = datetime.now(UTC)
+        self.audit_logger.record(
+            event_type=AuthEventType.STORAGE_UPLOAD_COMPLETED,
+            outcome=AuthEventOutcome.SUCCESS,
+            user_id=user_id,
+            metadata={
+                "upload_id": str(upload.id),
+                "gym_id": str(gym_id),
+                "document_type": document_type.value,
+                "storage_key": upload.storage_key,
+                "verified_size": metadata.content_length,
+            },
+        )
+        await self.session.commit()
+        await self.session.refresh(document)
+        if old_key and old_key != upload.storage_key:
+            try:
+                await storage.delete_object(key=old_key)
+            except Exception:
+                pass
+        return self._build_verification_document_data(document)
+
+    async def get_verification_download(
+        self, *, user: User, gym_id: UUID, document_type: GymVerificationDocumentType
+    ) -> GymVerificationDownloadData:
+        await self.get_verification(user=user, gym_id=gym_id)
+        document = await self.verification_repository.get_document_by_type(
+            gym_id=gym_id, document_type=document_type
+        )
+        if document is None:
+            from app.modules.gyms.exceptions import GymVerificationDocumentNotFoundError
+
+            raise GymVerificationDocumentNotFoundError(
+                "The verification document was not found."
+            )
+        storage = self._require_storage()
+        if document.storage_bucket != storage.bucket:
+            raise StorageUploadFailedError(
+                "The document storage location is unavailable."
+            )
+        download = await storage.create_download_url(key=document.storage_key)
+        self.audit_logger.record(
+            event_type=AuthEventType.VERIFICATION_DOCUMENT_DOWNLOAD_REQUESTED,
+            outcome=AuthEventOutcome.SUCCESS,
+            user_id=user.id,
+            metadata={
+                "gym_id": str(gym_id),
+                "document_type": document_type.value,
+                "storage_key": document.storage_key,
+            },
+        )
+        await self.session.commit()
+        return GymVerificationDownloadData(
+            download_url=download.url, expires_at=download.expires_at
+        )
+
+    def _require_storage(self) -> S3Storage:
+        if self.storage is None:
+            raise StorageNotConfiguredError("Private S3 uploads are not configured.")
+        return self.storage
+
+    @staticmethod
+    def _validate_upload_metadata(filename: str, mime_type: str, size: int) -> None:
+        if not filename.strip() or mime_type not in ALLOWED_EXTENSION_BY_MIME_TYPE:
+            raise GymVerificationDocumentInvalidError(
+                "The document metadata is invalid."
+            )
+        if not 1 <= size <= MAX_GYM_VERIFICATION_FILE_SIZE_BYTES:
+            raise GymVerificationDocumentInvalidError(
+                "The document file size is invalid."
+            )
+
+    async def _require_verification_manager(
+        self, *, user_id: UUID, gym_id: UUID, lock: bool
+    ) -> Gym:
+        membership = await self.staff_repository.get_user_membership(
+            user_id=user_id, gym_id=gym_id
+        )
+        if membership is None or membership.role not in {
+            GymStaffRole.OWNER,
+            GymStaffRole.MANAGER,
+        }:
+            raise GymVerificationAccessDeniedError(
+                "Only an owner or manager may manage verification documents."
+            )
+        gym = await (
+            self.gym_repository.get_by_id_for_update(gym_id)
+            if lock
+            else self.gym_repository.get_by_id(gym_id)
+        )
+        if gym is None:
+            raise GymNotFoundError("The requested gym was not found.")
+        if gym.verification_status == GymVerificationStatus.PENDING:
+            raise GymVerificationReviewInProgressError(
+                "Verification documents cannot be changed "
+                "while the gym is under review."
+            )
+        if gym.verification_status == GymVerificationStatus.APPROVED:
+            raise GymVerificationAlreadyApprovedError(
+                "Approved verification documents cannot be changed."
+            )
+        return gym
+
     async def get_verification(
         self,
         *,
@@ -1117,10 +1381,11 @@ class GymService:
             id=document.id,
             document_type=document.document_type,
             document_name=document.document_name,
+            storage_bucket=document.storage_bucket,
             storage_key=document.storage_key,
-            file_url=document.file_url,
             mime_type=document.mime_type,
             file_size_bytes=document.file_size_bytes,
+            etag=document.etag,
             is_active=document.is_active,
             uploaded_by_user_id=(document.uploaded_by_user_id),
             created_at=document.created_at,

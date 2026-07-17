@@ -64,6 +64,12 @@ class AuthEventType(StrEnum):
     GYM_VERIFICATION_SUBMITTED = "gym_verification_submitted"
     GYM_VERIFICATION_APPROVED = "gym_verification_approved"
     GYM_VERIFICATION_REJECTED = "gym_verification_rejected"
+    STORAGE_UPLOAD_INITIATED = "storage_upload_initiated"
+    STORAGE_UPLOAD_COMPLETED = "storage_upload_completed"
+    STORAGE_UPLOAD_FAILED = "storage_upload_failed"
+    VERIFICATION_DOCUMENT_DOWNLOAD_REQUESTED = (
+        "verification_document_download_requested"
+    )
 
     TOKEN_REFRESHED = "token_refreshed"
     TOKEN_REFRESH_FAILED = "token_refresh_failed"

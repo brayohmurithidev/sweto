@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import PostgresDsn
+from pydantic import Field, PostgresDsn
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -57,6 +57,14 @@ class Settings(BaseSettings):
 
     sweto_super_admin_email: str | None = None
     sweto_super_admin_password: str | None = None
+
+    aws_region: str = "af-south-1"
+    aws_s3_uploads_bucket: str | None = None
+    aws_s3_presigned_upload_expiry_seconds: int = Field(default=300, ge=60, le=900)
+    aws_s3_presigned_download_expiry_seconds: int = Field(default=300, ge=60, le=900)
+    aws_s3_endpoint_url: str | None = None
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore", case_sensitive=False

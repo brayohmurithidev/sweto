@@ -56,6 +56,19 @@ from app.modules.gyms.exceptions import (
 from app.modules.profiles.exceptions import (
     InvalidProfileUpdateError,
 )
+from app.storage.exceptions import (
+    StorageAccessDeniedError,
+    StorageError,
+    StorageNotConfiguredError,
+    StorageObjectNotFoundError,
+    StorageObjectSizeMismatchError,
+    StorageObjectTypeMismatchError,
+    StorageServiceUnavailableError,
+    StorageUploadAlreadyCompletedError,
+    StorageUploadExpiredError,
+    StorageUploadFailedError,
+    StorageUploadNotFoundError,
+)
 
 
 def error_response(
@@ -522,6 +535,25 @@ async def gym_verification_error_handler(
     return error_response(
         status_code=status_code, code=code, message=str(exception), details=details
     )
+
+
+async def storage_error_handler(_: Request, exception: Exception) -> JSONResponse:
+    if not isinstance(exception, StorageError):
+        raise exception
+    mappings: dict[type[StorageError], tuple[int, str]] = {
+        StorageNotConfiguredError: (503, "STORAGE_NOT_CONFIGURED"),
+        StorageUploadNotFoundError: (404, "STORAGE_UPLOAD_NOT_FOUND"),
+        StorageUploadExpiredError: (409, "STORAGE_UPLOAD_EXPIRED"),
+        StorageUploadAlreadyCompletedError: (409, "STORAGE_UPLOAD_ALREADY_COMPLETED"),
+        StorageObjectNotFoundError: (404, "STORAGE_OBJECT_NOT_FOUND"),
+        StorageObjectSizeMismatchError: (422, "STORAGE_OBJECT_SIZE_MISMATCH"),
+        StorageObjectTypeMismatchError: (422, "STORAGE_OBJECT_TYPE_MISMATCH"),
+        StorageUploadFailedError: (422, "STORAGE_UPLOAD_FAILED"),
+        StorageAccessDeniedError: (403, "STORAGE_ACCESS_DENIED"),
+        StorageServiceUnavailableError: (503, "STORAGE_SERVICE_UNAVAILABLE"),
+    }
+    status_code, code = mappings.get(type(exception), (500, "STORAGE_ERROR"))
+    return error_response(status_code=status_code, code=code, message=str(exception))
 
 
 async def gym_already_exists_handler(

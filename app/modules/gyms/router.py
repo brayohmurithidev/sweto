@@ -12,13 +12,15 @@ from app.modules.gyms.schemas import (
     AmenityData,
     CreateGymData,
     CreateGymRequest,
-    CreateGymVerificationDocumentRequest,
     GymData,
     GymOnboardingData,
     GymOperatingHoursData,
     GymPricingData,
     GymVerificationData,
     GymVerificationDocumentData,
+    GymVerificationDownloadData,
+    GymVerificationUploadData,
+    GymVerificationUploadRequest,
     UpdateGymAmenitiesData,
     UpdateGymAmenitiesRequest,
     UpdateGymBusinessDetailsData,
@@ -32,6 +34,7 @@ from app.modules.gyms.schemas import (
 )
 from app.modules.gyms.service import GymService
 from app.shared.responses import APIResponse
+from app.storage.s3 import S3Storage
 
 router = APIRouter(
     prefix="/gyms",
@@ -329,27 +332,79 @@ async def update_gym_pricing(
     return APIResponse(data=data)
 
 
-@router.put(
-    "/{gym_id}/verification/documents/{document_type}",
-    response_model=APIResponse[GymVerificationDocumentData],
+@router.post(
+    "/{gym_id}/verification/documents/{document_type}/upload",
+    response_model=APIResponse[GymVerificationUploadData],
 )
-async def register_verification_document(
+async def initiate_verification_document_upload(
     gym_id: UUID,
     document_type: GymVerificationDocumentType,
-    payload: CreateGymVerificationDocumentRequest,
+    payload: GymVerificationUploadRequest,
+    current_user: CurrentUser,
+    session: DatabaseSession,
+    settings: ApplicationSettings,
+) -> APIResponse[GymVerificationUploadData]:
+    service = GymService(
+        session=session,
+        default_phone_region=settings.default_phone_region,
+        storage=S3Storage(settings),
+    )
+    return APIResponse(
+        data=await service.initiate_verification_upload(
+            user_id=current_user.id,
+            gym_id=gym_id,
+            document_type=document_type,
+            payload=payload,
+        )
+    )
+
+
+@router.post(
+    "/{gym_id}/verification/documents/{document_type}/upload/{upload_id}/complete",
+    response_model=APIResponse[GymVerificationDocumentData],
+)
+async def complete_verification_document_upload(
+    gym_id: UUID,
+    document_type: GymVerificationDocumentType,
+    upload_id: UUID,
     current_user: CurrentUser,
     session: DatabaseSession,
     settings: ApplicationSettings,
 ) -> APIResponse[GymVerificationDocumentData]:
     service = GymService(
-        session=session, default_phone_region=settings.default_phone_region
+        session=session,
+        default_phone_region=settings.default_phone_region,
+        storage=S3Storage(settings),
     )
     return APIResponse(
-        data=await service.create_verification_document(
+        data=await service.complete_verification_upload(
             user_id=current_user.id,
             gym_id=gym_id,
             document_type=document_type,
-            payload=payload,
+            upload_id=upload_id,
+        )
+    )
+
+
+@router.get(
+    "/{gym_id}/verification/documents/{document_type}/download",
+    response_model=APIResponse[GymVerificationDownloadData],
+)
+async def download_verification_document(
+    gym_id: UUID,
+    document_type: GymVerificationDocumentType,
+    current_user: CurrentUser,
+    session: DatabaseSession,
+    settings: ApplicationSettings,
+) -> APIResponse[GymVerificationDownloadData]:
+    service = GymService(
+        session=session,
+        default_phone_region=settings.default_phone_region,
+        storage=S3Storage(settings),
+    )
+    return APIResponse(
+        data=await service.get_verification_download(
+            user=current_user, gym_id=gym_id, document_type=document_type
         )
     )
 

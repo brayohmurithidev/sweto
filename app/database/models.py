@@ -14,6 +14,7 @@ from app.modules.profiles.models import (
     UserAccountRole,
     UserProfile,
 )
+from app.storage.models import StorageUpload
 
 __all__ = [
     "Amenity",
@@ -29,4 +30,5 @@ __all__ = [
     "User",
     "UserAccountRole",
     "UserProfile",
+    "StorageUpload",
 ]

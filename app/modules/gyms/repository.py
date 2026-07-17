@@ -409,6 +409,49 @@ class GymVerificationRepository:
 
         return document
 
+    async def create_or_replace_document_from_storage(
+        self,
+        *,
+        gym_id: UUID,
+        user_id: UUID,
+        document_type: GymVerificationDocumentType,
+        document_name: str,
+        bucket: str,
+        storage_key: str,
+        mime_type: str,
+        file_size_bytes: int,
+        etag: str | None,
+    ) -> tuple[GymVerificationDocument, str | None]:
+        document = await self.get_document_by_type(
+            gym_id=gym_id, document_type=document_type
+        )
+        old_key = document.storage_key if document is not None else None
+        if document is None:
+            document = GymVerificationDocument(
+                gym_id=gym_id,
+                uploaded_by_user_id=user_id,
+                document_type=document_type,
+                document_name=document_name,
+                storage_bucket=bucket,
+                storage_key=storage_key,
+                mime_type=mime_type,
+                file_size_bytes=file_size_bytes,
+                etag=etag,
+                is_active=True,
+            )
+            self.session.add(document)
+        else:
+            document.document_name = document_name
+            document.storage_bucket = bucket
+            document.storage_key = storage_key
+            document.file_url = None
+            document.mime_type = mime_type
+            document.file_size_bytes = file_size_bytes
+            document.etag = etag
+            document.uploaded_by_user_id = user_id
+            document.is_active = True
+        return document, old_key
+
     async def get_document(
         self,
         *,
