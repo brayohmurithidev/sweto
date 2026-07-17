@@ -50,6 +50,10 @@ class User(
     __tablename__ = "users"
     __table_args__ = (
         CheckConstraint(
+            "role IN ('user', 'admin', 'super_admin')",
+            name="user_role_valid",
+        ),
+        CheckConstraint(
             "phone_number IS NOT NULL OR email IS NOT NULL",
             name="login_identity_required",
         ),
@@ -83,6 +87,7 @@ class User(
             name="user_role",
         ),
         nullable=False,
+        index=True,
         default=UserRole.USER,
         server_default=UserRole.USER.value,
     )

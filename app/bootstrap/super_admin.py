@@ -2,6 +2,7 @@ import asyncio
 import sys
 
 from app.core.config import get_settings
+from app.database import models  # noqa: F401
 from app.database.session import async_session_factory, engine
 from app.modules.admin.exceptions import AdminError
 from app.modules.admin.service import AdminService

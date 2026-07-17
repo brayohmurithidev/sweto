@@ -61,6 +61,16 @@ class Gym(
             "status",
             "verification_status",
         ),
+        Index(
+            "ix_gyms_verification_status_submitted_at",
+            "verification_status",
+            "verification_submitted_at",
+        ),
+        CheckConstraint(
+            "verification_status IN "
+            "('not_submitted', 'pending', 'approved', 'rejected')",
+            name="gym_verification_status_valid",
+        ),
     )
 
     name: Mapped[str] = mapped_column(
@@ -853,7 +863,6 @@ class GymVerificationReview(
             ondelete="CASCADE",
         ),
         nullable=False,
-        index=True,
     )
 
     reviewed_by_user_id: Mapped[UUID] = mapped_column(
@@ -893,6 +902,11 @@ class GymVerificationReview(
     )
 
     __table_args__ = (
+        Index(
+            "ix_gym_verification_reviews_gym_reviewed_at",
+            "gym_id",
+            "reviewed_at",
+        ),
         CheckConstraint(
             "decision IN ('approve', 'reject')",
             name=("ck_gym_verification_reviews_decision_valid"),
