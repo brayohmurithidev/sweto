@@ -16,7 +16,9 @@ from app.modules.auth.enums import (
 )
 from app.modules.auth.exceptions import (
     AuthenticationRateLimitError,
+    CurrentPasswordIncorrectError,
     CurrentSessionRevocationError,
+    InvalidEmailOrPasswordError,
     InvalidOTPError,
     InvalidRefreshTokenError,
     OTPAttemptsExceededError,
@@ -24,6 +26,9 @@ from app.modules.auth.exceptions import (
     OTPChallengeExpiredError,
     OTPChallengeNotFoundError,
     OTPResendCooldownError,
+    PasswordLoginNotAvailableError,
+    PasswordPolicyViolationError,
+    PasswordReuseNotAllowedError,
     RefreshSessionExpiredError,
     RefreshSessionRevokedError,
     SessionNotFoundError,
@@ -42,7 +47,11 @@ from app.modules.auth.repository import (
 )
 from app.modules.auth.schemas import (
     AuthenticatedUserData,
+    ChangePasswordData,
+    ChangePasswordRequest,
     LogoutAllData,
+    PasswordLoginData,
+    PasswordLoginRequest,
     RefreshTokenData,
     RefreshTokenRequest,
     RequestOTPData,
@@ -55,7 +64,11 @@ from app.modules.auth.schemas import (
 from app.modules.auth.security import (
     generate_numeric_otp,
     hash_otp,
+    hash_password,
+    normalize_email,
+    password_needs_rehash,
     verify_otp_hash,
+    verify_password,
 )
 from app.modules.auth.tokens import (
     create_access_token,
@@ -63,6 +76,8 @@ from app.modules.auth.tokens import (
     hash_refresh_token,
 )
 from app.rate_limit.base import RateLimiter
+
+_DUMMY_PASSWORD_HASH = hash_password("invalid-password-login-placeholder")
 
 
 class AuthenticationService:
@@ -85,6 +100,201 @@ class AuthenticationService:
         self.user_repository = UserRepository(session)
         self.refresh_session_repository = RefreshSessionRepository(session)
         self.audit_logger = AuthAuditLogger(session)
+
+    async def _enforce_password_login_limits(
+        self,
+        *,
+        email: str,
+        ip_address: str | None,
+    ) -> None:
+        email_result = await self.rate_limiter.consume(
+            key=f"password-login:email:{email}",
+            limit=self.settings.password_login_email_limit,
+            window_seconds=self.settings.password_login_email_window_seconds,
+        )
+        if not email_result.allowed:
+            raise AuthenticationRateLimitError(
+                code="PASSWORD_LOGIN_RATE_LIMITED",
+                message="Too many password login attempts were made.",
+                retry_after_seconds=email_result.retry_after_seconds,
+                limit=email_result.limit,
+            )
+
+        if ip_address is None:
+            return
+
+        ip_result = await self.rate_limiter.consume(
+            key=f"password-login:ip:{ip_address}",
+            limit=self.settings.password_login_ip_limit,
+            window_seconds=self.settings.password_login_ip_window_seconds,
+        )
+        if not ip_result.allowed:
+            raise AuthenticationRateLimitError(
+                code="PASSWORD_LOGIN_RATE_LIMITED",
+                message="Too many password login attempts were made.",
+                retry_after_seconds=ip_result.retry_after_seconds,
+                limit=ip_result.limit,
+            )
+
+    @staticmethod
+    def _validate_new_password(password: str) -> None:
+        if len(password) < 12 or len(password) > 128 or not password.strip():
+            raise PasswordPolicyViolationError(
+                "The new password must be between 12 and 128 non-blank characters."
+            )
+
+    @staticmethod
+    def _build_user_data(user: User) -> AuthenticatedUserData:
+        return AuthenticatedUserData(
+            id=user.id,
+            phone_number=user.phone_number,
+            email=user.email,
+            status=user.status.value,
+            is_phone_verified=user.is_phone_verified,
+            role=user.role,
+            must_change_password=user.must_change_password,
+        )
+
+    async def password_login(
+        self,
+        *,
+        payload: PasswordLoginRequest,
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> PasswordLoginData:
+        """Authenticate email/password credentials using existing sessions."""
+
+        now = datetime.now(UTC)
+        email = normalize_email(str(payload.email))
+        await self._enforce_password_login_limits(
+            email=email,
+            ip_address=ip_address,
+        )
+        user = await self.user_repository.get_by_email(email)
+        stored_hash = (
+            user.password_hash
+            if user is not None and user.password_hash is not None
+            else _DUMMY_PASSWORD_HASH
+        )
+        password_is_valid = verify_password(payload.password, stored_hash)
+
+        if user is None or user.password_hash is None or not password_is_valid:
+            self.audit_logger.record(
+                event_type=AuthEventType.LOGIN_DENIED,
+                outcome=AuthEventOutcome.FAILURE,
+                user_id=user.id if user is not None else None,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                metadata={"reason": "invalid_email_or_password"},
+            )
+            await self.session.commit()
+            raise InvalidEmailOrPasswordError("The email or password is incorrect.")
+
+        if user.status in {UserStatus.SUSPENDED, UserStatus.DEACTIVATED}:
+            self.audit_logger.record(
+                event_type=AuthEventType.LOGIN_DENIED,
+                outcome=AuthEventOutcome.BLOCKED,
+                user_id=user.id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                metadata={"user_status": user.status.value},
+            )
+            await self.session.commit()
+            raise UserAccessDeniedError("This account is not permitted to sign in.")
+
+        if password_needs_rehash(user.password_hash):
+            user.password_hash = hash_password(payload.password)
+
+        user.last_login_at = now
+        raw_refresh_token = generate_refresh_token()
+        refresh_token_expires_at = now + timedelta(
+            days=self.settings.refresh_token_expiry_days
+        )
+        refresh_session = RefreshSession(
+            user_id=user.id,
+            token_hash=hash_refresh_token(raw_refresh_token),
+            status=SessionStatus.ACTIVE,
+            expires_at=refresh_token_expires_at,
+            device_id=payload.device_id,
+            device_name=payload.device_name,
+            platform=payload.platform,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            last_used_at=now,
+        )
+        self.refresh_session_repository.add(refresh_session)
+        await self.session.flush()
+        access_token, access_token_expires_at = create_access_token(
+            user_id=user.id,
+            session_id=refresh_session.id,
+            settings=self.settings,
+            now=now,
+        )
+        self.audit_logger.record(
+            event_type=AuthEventType.LOGIN_SUCCEEDED,
+            outcome=AuthEventOutcome.SUCCESS,
+            user_id=user.id,
+            session_id=refresh_session.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            metadata={"authentication_method": "password"},
+        )
+        await self.session.commit()
+        return PasswordLoginData(
+            user=self._build_user_data(user),
+            tokens=TokenData(
+                access_token=access_token,
+                refresh_token=raw_refresh_token,
+                access_token_expires_at=access_token_expires_at,
+                refresh_token_expires_at=refresh_token_expires_at,
+            ),
+            must_change_password=user.must_change_password,
+        )
+
+    async def change_password(
+        self,
+        *,
+        user_id: UUID,
+        payload: ChangePasswordRequest,
+        ip_address: str | None,
+        user_agent: str | None,
+    ) -> ChangePasswordData:
+        """Change a password atomically and revoke every existing session."""
+
+        user = await self.user_repository.get_by_id_for_update(user_id)
+        if user is None:
+            raise PasswordLoginNotAvailableError(
+                "Password login is not available for this account."
+            )
+        if user.password_hash is None:
+            raise PasswordLoginNotAvailableError(
+                "Password login is not available for this account."
+            )
+        if not verify_password(payload.current_password, user.password_hash):
+            raise CurrentPasswordIncorrectError("The current password is incorrect.")
+        if verify_password(payload.new_password, user.password_hash):
+            raise PasswordReuseNotAllowedError(
+                "The new password must differ from the current password."
+            )
+        self._validate_new_password(payload.new_password)
+
+        now = datetime.now(UTC)
+        user.password_hash = hash_password(payload.new_password)
+        user.must_change_password = False
+        sessions_revoked = await self.refresh_session_repository.revoke_all_for_user(
+            user_id=user.id,
+            now=now,
+        )
+        self.audit_logger.record(
+            event_type=AuthEventType.PASSWORD_CHANGED,
+            outcome=AuthEventOutcome.SUCCESS,
+            user_id=user.id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            metadata={"sessions_revoked": sessions_revoked},
+        )
+        await self.session.commit()
+        return ChangePasswordData(sessions_revoked=sessions_revoked)
 
     async def _enforce_otp_request_limits(
         self,
@@ -524,12 +734,7 @@ class AuthenticationService:
         await self.session.commit()
 
         return VerifyOTPData(
-            user=AuthenticatedUserData(
-                id=user.id,
-                phone_number=user.phone_number,
-                status=user.status.value,
-                is_phone_verified=user.is_phone_verified,
-            ),
+            user=self._build_user_data(user),
             tokens=TokenData(
                 access_token=access_token,
                 refresh_token=raw_refresh_token,
@@ -728,7 +933,8 @@ class AuthenticationService:
                 refresh_token=raw_refresh_token,
                 access_token_expires_at=access_token_expires_at,
                 refresh_token_expires_at=refresh_token_expires_at,
-            )
+            ),
+            must_change_password=user.must_change_password,
         )
 
     async def logout(

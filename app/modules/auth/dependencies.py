@@ -14,6 +14,7 @@ from app.database.session import get_db_session
 from app.modules.auth.enums import UserStatus
 from app.modules.auth.exceptions import (
     InvalidAccessTokenError,
+    PasswordChangeRequiredError,
     UserAccessDeniedError,
 )
 from app.modules.auth.models import RefreshSession, User
@@ -111,9 +112,42 @@ async def get_current_auth_context(
     )
 
 
-CurrentAuthContext = Annotated[
+BaseAuthContext = Annotated[
     AuthContext,
     Depends(get_current_auth_context),
+]
+
+
+async def require_password_change_complete(
+    auth_context: BaseAuthContext,
+) -> AuthContext:
+    """Require an authenticated user to have completed password setup."""
+
+    if auth_context.user.must_change_password:
+        raise PasswordChangeRequiredError(
+            "Change your temporary password before accessing this resource."
+        )
+
+    return auth_context
+
+
+CurrentAuthContext = Annotated[
+    AuthContext,
+    Depends(require_password_change_complete),
+]
+
+
+async def get_base_current_user(
+    auth_context: BaseAuthContext,
+) -> User:
+    """Return a user without enforcing the forced-password gate."""
+
+    return auth_context.user
+
+
+BaseCurrentUser = Annotated[
+    User,
+    Depends(get_base_current_user),
 ]
 
 

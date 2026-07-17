@@ -9,12 +9,14 @@ from app.core.exceptions import (
     access_token_expired_handler,
     amenity_not_found_handler,
     authentication_rate_limit_handler,
+    current_password_incorrect_handler,
     current_session_revocation_handler,
     gym_access_denied_handler,
     gym_already_exists_handler,
     gym_not_found_handler,
     gym_slug_conflict_handler,
     invalid_access_token_handler,
+    invalid_email_or_password_handler,
     invalid_otp_handler,
     invalid_phone_number_handler,
     invalid_profile_update_handler,
@@ -24,6 +26,10 @@ from app.core.exceptions import (
     otp_challenge_expired_handler,
     otp_challenge_not_found_handler,
     otp_resend_cooldown_handler,
+    password_change_required_handler,
+    password_login_not_available_handler,
+    password_policy_violation_handler,
+    password_reuse_not_allowed_handler,
     refresh_session_expired_handler,
     refresh_session_revoked_handler,
     session_not_found_handler,
@@ -34,8 +40,10 @@ from app.database.session import engine
 from app.modules.auth.exceptions import (
     AccessTokenExpiredError,
     AuthenticationRateLimitError,
+    CurrentPasswordIncorrectError,
     CurrentSessionRevocationError,
     InvalidAccessTokenError,
+    InvalidEmailOrPasswordError,
     InvalidOTPError,
     InvalidPhoneNumberError,
     InvalidRefreshTokenError,
@@ -44,6 +52,10 @@ from app.modules.auth.exceptions import (
     OTPChallengeExpiredError,
     OTPChallengeNotFoundError,
     OTPResendCooldownError,
+    PasswordChangeRequiredError,
+    PasswordLoginNotAvailableError,
+    PasswordPolicyViolationError,
+    PasswordReuseNotAllowedError,
     RefreshSessionExpiredError,
     RefreshSessionRevokedError,
     SessionNotFoundError,
@@ -136,6 +148,30 @@ def create_application() -> FastAPI:
     application.add_exception_handler(
         UserAccessDeniedError,
         user_access_denied_handler,
+    )
+    application.add_exception_handler(
+        InvalidEmailOrPasswordError,
+        invalid_email_or_password_handler,
+    )
+    application.add_exception_handler(
+        PasswordChangeRequiredError,
+        password_change_required_handler,
+    )
+    application.add_exception_handler(
+        CurrentPasswordIncorrectError,
+        current_password_incorrect_handler,
+    )
+    application.add_exception_handler(
+        PasswordReuseNotAllowedError,
+        password_reuse_not_allowed_handler,
+    )
+    application.add_exception_handler(
+        PasswordPolicyViolationError,
+        password_policy_violation_handler,
+    )
+    application.add_exception_handler(
+        PasswordLoginNotAvailableError,
+        password_login_not_available_handler,
     )
 
     application.add_exception_handler(

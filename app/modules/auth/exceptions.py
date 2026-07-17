@@ -42,6 +42,30 @@ class UserAccessDeniedError(AuthenticationError):
     """Raised when an account is suspended or deactivated."""
 
 
+class InvalidEmailOrPasswordError(AuthenticationError):
+    """Raised for all invalid password-login credentials."""
+
+
+class PasswordChangeRequiredError(AuthenticationError):
+    """Raised when access is limited until the password is changed."""
+
+
+class CurrentPasswordIncorrectError(AuthenticationError):
+    """Raised when a password change supplies the wrong current password."""
+
+
+class PasswordReuseNotAllowedError(AuthenticationError):
+    """Raised when the replacement password matches the current password."""
+
+
+class PasswordPolicyViolationError(AuthenticationError):
+    """Raised when a replacement password does not meet policy."""
+
+
+class PasswordLoginNotAvailableError(AuthenticationError):
+    """Raised when an account does not have password credentials."""
+
+
 class InvalidAccessTokenError(AuthenticationError):
     """Raised when an access token cannot be validated."""
 

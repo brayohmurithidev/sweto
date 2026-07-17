@@ -4,8 +4,10 @@ from fastapi.responses import JSONResponse
 from app.modules.auth.exceptions import (
     AccessTokenExpiredError,
     AuthenticationRateLimitError,
+    CurrentPasswordIncorrectError,
     CurrentSessionRevocationError,
     InvalidAccessTokenError,
+    InvalidEmailOrPasswordError,
     InvalidOTPError,
     InvalidPhoneNumberError,
     InvalidRefreshTokenError,
@@ -14,6 +16,10 @@ from app.modules.auth.exceptions import (
     OTPChallengeExpiredError,
     OTPChallengeNotFoundError,
     OTPResendCooldownError,
+    PasswordChangeRequiredError,
+    PasswordLoginNotAvailableError,
+    PasswordPolicyViolationError,
+    PasswordReuseNotAllowedError,
     RefreshSessionExpiredError,
     RefreshSessionRevokedError,
     SessionNotFoundError,
@@ -189,6 +195,78 @@ async def user_access_denied_handler(
     return error_response(
         status_code=status.HTTP_403_FORBIDDEN,
         code="USER_ACCESS_DENIED",
+        message=str(exception),
+    )
+
+
+async def invalid_email_or_password_handler(
+    _: Request, exception: Exception
+) -> JSONResponse:
+    if not isinstance(exception, InvalidEmailOrPasswordError):
+        raise exception
+    return error_response(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        code="INVALID_EMAIL_OR_PASSWORD",
+        message=str(exception),
+    )
+
+
+async def password_change_required_handler(
+    _: Request, exception: Exception
+) -> JSONResponse:
+    if not isinstance(exception, PasswordChangeRequiredError):
+        raise exception
+    return error_response(
+        status_code=status.HTTP_403_FORBIDDEN,
+        code="PASSWORD_CHANGE_REQUIRED",
+        message=str(exception),
+    )
+
+
+async def current_password_incorrect_handler(
+    _: Request, exception: Exception
+) -> JSONResponse:
+    if not isinstance(exception, CurrentPasswordIncorrectError):
+        raise exception
+    return error_response(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        code="CURRENT_PASSWORD_INCORRECT",
+        message=str(exception),
+    )
+
+
+async def password_reuse_not_allowed_handler(
+    _: Request, exception: Exception
+) -> JSONResponse:
+    if not isinstance(exception, PasswordReuseNotAllowedError):
+        raise exception
+    return error_response(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        code="PASSWORD_REUSE_NOT_ALLOWED",
+        message=str(exception),
+    )
+
+
+async def password_policy_violation_handler(
+    _: Request, exception: Exception
+) -> JSONResponse:
+    if not isinstance(exception, PasswordPolicyViolationError):
+        raise exception
+    return error_response(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        code="PASSWORD_POLICY_VIOLATION",
+        message=str(exception),
+    )
+
+
+async def password_login_not_available_handler(
+    _: Request, exception: Exception
+) -> JSONResponse:
+    if not isinstance(exception, PasswordLoginNotAvailableError):
+        raise exception
+    return error_response(
+        status_code=status.HTTP_409_CONFLICT,
+        code="PASSWORD_LOGIN_NOT_AVAILABLE",
         message=str(exception),
     )
 

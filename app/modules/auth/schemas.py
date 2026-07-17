@@ -1,7 +1,10 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from app.modules.auth.enums import UserRole
+from app.modules.auth.security import normalize_email
 
 
 class RequestOTPRequest(BaseModel):
@@ -56,9 +59,12 @@ class AuthenticatedUserData(BaseModel):
     """Authenticated user information."""
 
     id: UUID
-    phone_number: str
+    phone_number: str | None
+    email: EmailStr | None
     status: str
     is_phone_verified: bool
+    role: UserRole
+    must_change_password: bool
 
 
 class TokenData(BaseModel):
@@ -78,6 +84,44 @@ class VerifyOTPData(BaseModel):
     tokens: TokenData
     is_new_user: bool
     requires_account_setup: bool
+
+
+class PasswordLoginRequest(BaseModel):
+    """Credentials and device metadata for password authentication."""
+
+    email: EmailStr
+    password: str = Field(min_length=1, max_length=128)
+    device_id: str | None = Field(default=None, max_length=255)
+    device_name: str | None = Field(default=None, max_length=120)
+    platform: str | None = Field(default=None, max_length=50)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_login_email(cls, value: object) -> object:
+        return normalize_email(value) if isinstance(value, str) else value
+
+
+class PasswordLoginData(BaseModel):
+    """User and tokens returned after password authentication."""
+
+    user: AuthenticatedUserData
+    tokens: TokenData
+    must_change_password: bool
+
+
+class ChangePasswordRequest(BaseModel):
+    """Current and replacement passwords for an authenticated user."""
+
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=1, max_length=128)
+
+
+class ChangePasswordData(BaseModel):
+    """Result of changing a password and invalidating sessions."""
+
+    password_changed: bool = True
+    sessions_revoked: int
+    login_required: bool = True
 
 
 class RefreshTokenRequest(BaseModel):
@@ -108,6 +152,7 @@ class RefreshTokenData(BaseModel):
     """Tokens returned after refresh-token rotation."""
 
     tokens: TokenData
+    must_change_password: bool
 
 
 class LogoutRequest(BaseModel):

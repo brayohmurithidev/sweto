@@ -3,7 +3,10 @@ from uuid import uuid4
 from app.modules.auth.security import (
     generate_numeric_otp,
     hash_otp,
+    hash_password,
+    password_needs_rehash,
     verify_otp_hash,
+    verify_password,
 )
 
 
@@ -50,3 +53,21 @@ def test_verify_otp_hash_rejects_wrong_code() -> None:
         secret="test-secret",
         expected_hash=hashed,
     )
+
+
+def test_hash_password_uses_argon2_and_verifies() -> None:
+    encoded = hash_password("a-secure-password")
+
+    assert encoded.startswith("$argon2")
+    assert verify_password("a-secure-password", encoded)
+    assert not verify_password("the-wrong-password", encoded)
+
+
+def test_password_rehash_detection_accepts_current_hash() -> None:
+    encoded = hash_password("a-secure-password")
+
+    assert not password_needs_rehash(encoded)
+
+
+def test_password_rehash_detection_rejects_invalid_hash() -> None:
+    assert password_needs_rehash("not-a-password-hash")

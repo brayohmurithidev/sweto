@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     otp_verify_ip_limit: int = 30
     otp_verify_ip_window_seconds: int = 900
 
+    password_login_email_limit: int = 5
+    password_login_email_window_seconds: int = 900
+    password_login_ip_limit: int = 20
+    password_login_ip_window_seconds: int = 900
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore", case_sensitive=False
     )

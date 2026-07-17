@@ -2,9 +2,9 @@ from enum import StrEnum
 
 
 class UserRole(StrEnum):
-    SUPER_ADMIN = "super_admin"
-    ADMIN = "admin"
     USER = "user"
+    ADMIN = "admin"
+    SUPER_ADMIN = "super_admin"
 
 
 class UserStatus(StrEnum):
@@ -54,6 +54,7 @@ class AuthEventType(StrEnum):
 
     LOGIN_SUCCEEDED = "login_succeeded"
     LOGIN_DENIED = "login_denied"
+    PASSWORD_CHANGED = "password_changed"
 
     TOKEN_REFRESHED = "token_refreshed"
     TOKEN_REFRESH_FAILED = "token_refresh_failed"

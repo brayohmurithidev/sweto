@@ -14,6 +14,7 @@ from app.modules.auth.models import (
     RefreshSession,
     User,
 )
+from app.modules.auth.security import normalize_email
 
 
 class OTPChallengeRepository:
@@ -100,6 +101,16 @@ class UserRepository:
 
         return result.scalar_one_or_none()
 
+    async def get_by_email(
+        self,
+        email: str,
+    ) -> User | None:
+        statement = select(User).where(User.email == normalize_email(email))
+
+        result = await self.session.execute(statement)
+
+        return result.scalar_one_or_none()
+
     def add(self, user: User) -> None:
         self.session.add(user)
 
@@ -108,6 +119,16 @@ class UserRepository:
         user_id: UUID,
     ) -> User | None:
         statement = select(User).where(User.id == user_id)
+
+        result = await self.session.execute(statement)
+
+        return result.scalar_one_or_none()
+
+    async def get_by_id_for_update(
+        self,
+        user_id: UUID,
+    ) -> User | None:
+        statement = select(User).where(User.id == user_id).with_for_update()
 
         result = await self.session.execute(statement)
 

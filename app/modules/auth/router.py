@@ -9,14 +9,19 @@ from app.database.session import get_db_session
 from app.integrations.sms.base import SMSProvider
 from app.integrations.sms.dependencies import get_sms_provider
 from app.modules.auth.dependencies import (
+    BaseAuthContext,
+    BaseCurrentUser,
     CurrentAuthContext,
-    CurrentUser,
 )
 from app.modules.auth.schemas import (
     AuthenticatedUserData,
+    ChangePasswordData,
+    ChangePasswordRequest,
     LogoutAllData,
     LogoutAllRequest,
     LogoutRequest,
+    PasswordLoginData,
+    PasswordLoginRequest,
     RefreshTokenData,
     RefreshTokenRequest,
     RequestOTPData,
@@ -55,6 +60,34 @@ ConfiguredRateLimiter = Annotated[
     RateLimiter,
     Depends(get_rate_limiter),
 ]
+
+
+@router.post(
+    "/password/login",
+    response_model=APIResponse[PasswordLoginData],
+)
+async def password_login(
+    payload: PasswordLoginRequest,
+    request: Request,
+    session: DatabaseSession,
+    settings: ApplicationSettings,
+    sms_provider: ConfiguredSMSProvider,
+    rate_limiter: ConfiguredRateLimiter,
+) -> APIResponse[PasswordLoginData]:
+    """Authenticate an email/password account using standard sessions."""
+
+    service = AuthenticationService(
+        session=session,
+        settings=settings,
+        sms_provider=sms_provider,
+        rate_limiter=rate_limiter,
+    )
+    data = await service.password_login(
+        payload=payload,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    return APIResponse(data=data)
 
 
 @router.post(
@@ -123,7 +156,7 @@ async def verify_otp(
     response_model=APIResponse[AuthenticatedUserData],
 )
 async def get_me(
-    current_user: CurrentUser,
+    current_user: BaseCurrentUser,
 ) -> APIResponse[AuthenticatedUserData]:
     """Return the currently authenticated SWETO user."""
 
@@ -131,10 +164,43 @@ async def get_me(
         data=AuthenticatedUserData(
             id=current_user.id,
             phone_number=current_user.phone_number,
+            email=current_user.email,
             status=current_user.status.value,
             is_phone_verified=current_user.is_phone_verified,
+            role=current_user.role,
+            must_change_password=current_user.must_change_password,
         )
     )
+
+
+@router.post(
+    "/change-password",
+    response_model=APIResponse[ChangePasswordData],
+)
+async def change_password(
+    payload: ChangePasswordRequest,
+    request: Request,
+    auth_context: BaseAuthContext,
+    session: DatabaseSession,
+    settings: ApplicationSettings,
+    sms_provider: ConfiguredSMSProvider,
+    rate_limiter: ConfiguredRateLimiter,
+) -> APIResponse[ChangePasswordData]:
+    """Replace the current password and invalidate all login sessions."""
+
+    service = AuthenticationService(
+        session=session,
+        settings=settings,
+        sms_provider=sms_provider,
+        rate_limiter=rate_limiter,
+    )
+    data = await service.change_password(
+        user_id=auth_context.user.id,
+        payload=payload,
+        ip_address=request.client.host if request.client else None,
+        user_agent=request.headers.get("user-agent"),
+    )
+    return APIResponse(data=data)
 
 
 @router.post(

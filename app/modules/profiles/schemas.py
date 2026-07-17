@@ -52,7 +52,7 @@ class ProfileData(BaseModel):
 
     id: UUID
     user_id: UUID
-    phone_number: str
+    phone_number: str | None
 
     full_name: str | None
     email: EmailStr | None

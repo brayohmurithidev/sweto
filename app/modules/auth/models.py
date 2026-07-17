@@ -28,8 +28,8 @@ from app.modules.auth.enums import (
     OTPPurpose,
     OTPStatus,
     SessionStatus,
-    UserStatus,
     UserRole,
+    UserStatus,
 )
 
 if TYPE_CHECKING:
@@ -48,14 +48,34 @@ class User(
     """A person who can authenticate with SWETO."""
 
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "phone_number IS NOT NULL OR email IS NOT NULL",
+            name="login_identity_required",
+        ),
+        CheckConstraint(
+            "role NOT IN ('admin', 'super_admin') "
+            "OR (email IS NOT NULL AND password_hash IS NOT NULL)",
+            name="administrative_credentials_required",
+        ),
+    )
 
-    phone_number: Mapped[str] = mapped_column(
+    phone_number: Mapped[str | None] = mapped_column(
         String(20),
-        nullable=False,
+        nullable=True,
         unique=True,
     )
 
-    
+    email: Mapped[str | None] = mapped_column(
+        String(320),
+        nullable=True,
+        unique=True,
+    )
+
+    password_hash: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
 
     role: Mapped[UserRole] = mapped_column(
         string_enum(

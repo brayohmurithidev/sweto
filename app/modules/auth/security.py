@@ -3,6 +3,40 @@ import hmac
 import secrets
 from uuid import UUID
 
+from pwdlib import PasswordHash
+
+password_hash = PasswordHash.recommended()
+
+
+def normalize_email(email: str) -> str:
+    """Normalize an email identity for storage and lookup."""
+
+    return email.strip().lower()
+
+
+def hash_password(password: str) -> str:
+    """Hash a human password with the configured Argon2 hasher."""
+
+    return password_hash.hash(password)
+
+
+def verify_password(password: str, password_hash_value: str) -> bool:
+    """Verify a human password without exposing hash parsing errors."""
+
+    try:
+        return password_hash.verify(password, password_hash_value)
+    except (TypeError, ValueError):
+        return False
+
+
+def password_needs_rehash(password_hash_value: str) -> bool:
+    """Return whether a stored password hash uses outdated parameters."""
+
+    try:
+        return password_hash.current_hasher.check_needs_rehash(password_hash_value)
+    except (TypeError, ValueError):
+        return True
+
 
 def generate_numeric_otp(length: int) -> str:
     """Generate a cryptographically secure fixed-length numeric OTP."""
