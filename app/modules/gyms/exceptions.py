@@ -21,18 +21,44 @@ class GymAlreadyExistsError(GymError):
 class AmenityNotFoundError(GymError):
     """Raised when one or more selected amenities are invalid."""
 
-class GymVerificationDocumentNotFoundError(Exception):
+
+class GymVerificationDocumentNotFoundError(GymError):
     """Raised when a verification document does not exist."""
 
 
-class GymVerificationRequirementsError(Exception):
+class GymVerificationDocumentInvalidError(GymError):
+    """Raised when verification document metadata is invalid."""
+
+
+class GymVerificationRequirementsError(GymError):
     """Raised when required verification documents are missing."""
 
+    def __init__(self, missing_document_types: list[str]) -> None:
+        self.missing_document_types = missing_document_types
+        super().__init__(
+            "Missing required documents: " + ", ".join(missing_document_types) + "."
+        )
 
-class GymVerificationAlreadyPendingError(Exception):
+
+class GymVerificationAlreadyPendingError(GymError):
     """Raised when verification is already under review."""
 
 
-class GymVerificationReviewError(Exception):
+class GymVerificationAlreadyApprovedError(GymError):
+    """Raised when an approved gym is submitted or edited."""
+
+
+class GymVerificationReviewInProgressError(GymError):
+    """Raised when pending verification metadata would be changed."""
+
+
+class GymVerificationNotPendingError(GymError):
     """Raised when a verification review cannot be completed."""
 
+
+class GymVerificationRejectionReasonRequiredError(GymError):
+    """Raised when a rejection has no usable reason."""
+
+
+class GymVerificationAccessDeniedError(GymError):
+    """Raised when a user cannot access a gym verification submission."""

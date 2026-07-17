@@ -17,7 +17,6 @@ class GymVerificationStatus(StrEnum):
 
     NOT_SUBMITTED = "not_submitted"
     PENDING = "pending"
-    UNDER_REVIEW = "under_review"
     APPROVED = "approved"
     REJECTED = "rejected"
 
@@ -92,6 +91,6 @@ class GymVerificationDocumentType(StrEnum):
     OTHER = "other"
 
 
-class GymVerificationReviewDecision(StrEnum):
+class GymVerificationDecision(StrEnum):
     APPROVE = "approve"
     REJECT = "reject"

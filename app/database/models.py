@@ -7,6 +7,8 @@ from app.modules.gyms.models import (
     GymAmenity,
     GymOperatingHours,
     GymStaff,
+    GymVerificationDocument,
+    GymVerificationReview,
 )
 from app.modules.profiles.models import (
     UserAccountRole,
@@ -20,6 +22,8 @@ __all__ = [
     "GymAmenity",
     "GymOperatingHours",
     "GymStaff",
+    "GymVerificationDocument",
+    "GymVerificationReview",
     "OTPChallenge",
     "RefreshSession",
     "User",

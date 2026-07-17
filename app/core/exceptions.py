@@ -43,6 +43,15 @@ from app.modules.gyms.exceptions import (
     GymAlreadyExistsError,
     GymNotFoundError,
     GymSlugConflictError,
+    GymVerificationAccessDeniedError,
+    GymVerificationAlreadyApprovedError,
+    GymVerificationAlreadyPendingError,
+    GymVerificationDocumentInvalidError,
+    GymVerificationDocumentNotFoundError,
+    GymVerificationNotPendingError,
+    GymVerificationRejectionReasonRequiredError,
+    GymVerificationRequirementsError,
+    GymVerificationReviewInProgressError,
 )
 from app.modules.profiles.exceptions import (
     InvalidProfileUpdateError,
@@ -477,6 +486,41 @@ async def gym_access_denied_handler(
         status_code=status.HTTP_403_FORBIDDEN,
         code="GYM_ACCESS_DENIED",
         message=str(exception),
+    )
+
+
+async def gym_verification_error_handler(
+    _: Request, exception: Exception
+) -> JSONResponse:
+    mappings: dict[type[Exception], tuple[int, str]] = {
+        GymVerificationDocumentNotFoundError: (
+            404,
+            "GYM_VERIFICATION_DOCUMENT_NOT_FOUND",
+        ),
+        GymVerificationDocumentInvalidError: (422, "GYM_VERIFICATION_DOCUMENT_INVALID"),
+        GymVerificationRequirementsError: (422, "GYM_VERIFICATION_DOCUMENTS_MISSING"),
+        GymVerificationAlreadyPendingError: (409, "GYM_VERIFICATION_ALREADY_PENDING"),
+        GymVerificationAlreadyApprovedError: (409, "GYM_VERIFICATION_ALREADY_APPROVED"),
+        GymVerificationReviewInProgressError: (
+            409,
+            "GYM_VERIFICATION_REVIEW_IN_PROGRESS",
+        ),
+        GymVerificationNotPendingError: (409, "GYM_VERIFICATION_NOT_PENDING"),
+        GymVerificationRejectionReasonRequiredError: (
+            422,
+            "GYM_VERIFICATION_REJECTION_REASON_REQUIRED",
+        ),
+        GymVerificationAccessDeniedError: (403, "GYM_VERIFICATION_ACCESS_DENIED"),
+    }
+    matched = mappings.get(type(exception))
+    if matched is None:
+        raise exception
+    status_code, code = matched
+    details: dict[str, object] | None = None
+    if isinstance(exception, GymVerificationRequirementsError):
+        details = {"missing_document_types": exception.missing_document_types}
+    return error_response(
+        status_code=status_code, code=code, message=str(exception), details=details
     )
 
 

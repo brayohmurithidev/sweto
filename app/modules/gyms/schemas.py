@@ -9,9 +9,8 @@ from app.modules.gyms.enums import (
     GymBusinessType,
     GymOnboardingStep,
     GymStatus,
+    GymVerificationDecision,
     GymVerificationDocumentType,
-    GymVerificationReviewDecision,
-    GymVerificationStatus,
     GymVerificationStatus,
     MembershipBillingPeriod,
 )
@@ -530,7 +529,6 @@ class UpdateGymPricingData(GymPricingData):
 
 
 class CreateGymVerificationDocumentRequest(BaseModel):
-    document_type: GymVerificationDocumentType
     document_name: str = Field(
         min_length=2,
         max_length=200,
@@ -548,9 +546,16 @@ class CreateGymVerificationDocumentRequest(BaseModel):
         max_length=100,
     )
     file_size_bytes: int = Field(
-        gt=0,
-        le=10 * 1024 * 1024,
+        ge=1,
     )
+
+    @field_validator("document_name", "storage_key", "mime_type")
+    @classmethod
+    def strip_required_metadata(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Document metadata fields cannot be blank.")
+        return normalized
 
 
 class GymVerificationDocumentData(BaseModel):
@@ -570,30 +575,18 @@ class GymVerificationDocumentData(BaseModel):
 class GymVerificationData(BaseModel):
     gym_id: UUID
     verification_status: GymVerificationStatus
-    submitted_at: datetime | None
-    reviewed_at: datetime | None
-    rejection_reason: str | None
+    verification_submitted_at: datetime | None
+    verification_reviewed_at: datetime | None
+    verification_rejection_reason: str | None
+    required_document_types: list[GymVerificationDocumentType]
+    missing_required_document_types: list[GymVerificationDocumentType]
     documents: list[GymVerificationDocumentData]
+    review_history: list["GymVerificationReviewData"]
     onboarding: GymOnboardingData
 
 
-class SubmitGymVerificationRequest(BaseModel):
-    confirmation: bool
-
-    @model_validator(mode="after")
-    def validate_confirmation(
-        self,
-    ) -> "SubmitGymVerificationRequest":
-        if not self.confirmation:
-            raise ValueError(
-                "Verification submission must be confirmed."
-            )
-
-        return self
-    
-
-class ReviewGymVerificationRequest(BaseModel):
-    decision: GymVerificationReviewDecision
+class GymVerificationReviewRequest(BaseModel):
+    decision: GymVerificationDecision
     notes: str | None = Field(
         default=None,
         max_length=2000,
@@ -604,37 +597,44 @@ class ReviewGymVerificationRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_review(
-        self,
-    ) -> "ReviewGymVerificationRequest":
+    def validate_review(self) -> "GymVerificationReviewRequest":
+        self.notes = self.notes.strip() or None if self.notes is not None else None
+        self.rejection_reason = (
+            self.rejection_reason.strip() or None
+            if self.rejection_reason is not None
+            else None
+        )
         if (
-            self.decision
-            == GymVerificationReviewDecision.REJECT
+            self.decision == GymVerificationDecision.REJECT
             and not self.rejection_reason
         ):
-            raise ValueError(
-                "A rejection reason is required."
-            )
-
-        if (
-            self.decision
-            == GymVerificationReviewDecision.APPROVE
-            and self.rejection_reason is not None
-        ):
-            raise ValueError(
-                "An approved verification cannot have a "
-                "rejection reason."
-            )
-
+            raise ValueError("A rejection reason is required.")
+        if self.decision == GymVerificationDecision.APPROVE:
+            self.rejection_reason = None
         return self
-    
+
 
 class GymVerificationReviewData(BaseModel):
     id: UUID
     gym_id: UUID
-    decision: GymVerificationReviewDecision
+    decision: GymVerificationDecision
     notes: str | None
     rejection_reason: str | None
     reviewed_by_user_id: UUID
     reviewed_at: datetime
-    onboarding: GymOnboardingData
+
+
+class GymVerificationSummaryData(BaseModel):
+    gym_id: UUID
+    gym_name: str
+    verification_status: GymVerificationStatus
+    verification_submitted_at: datetime | None
+    verification_reviewed_at: datetime | None
+    missing_required_document_types: list[GymVerificationDocumentType]
+
+
+class GymVerificationListData(BaseModel):
+    gyms: list[GymVerificationSummaryData]
+    total: int
+    limit: int
+    offset: int

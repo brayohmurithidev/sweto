@@ -1,13 +1,16 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.modules.gyms.enums import (
     GymStaffRole,
     GymStaffStatus,
+    GymVerificationDecision,
+    GymVerificationDocumentType,
+    GymVerificationStatus,
 )
 from app.modules.gyms.models import (
     Amenity,
@@ -22,12 +25,10 @@ from app.modules.gyms.models import (
     GymVerificationReview,
 )
 from app.modules.gyms.schemas import (
+    CreateGymVerificationDocumentRequest,
     GymDayPassInput,
     GymMembershipPlanInput,
     GymOperatingHoursInput,
-    GymVerificationDocumentType,
-    GymVerificationReviewDecision,
-    CreateGymVerificationDocumentRequest
 )
 
 
@@ -346,9 +347,7 @@ class GymVerificationRepository:
                 GymVerificationDocument.gym_id == gym_id,
                 GymVerificationDocument.is_active.is_(True),
             )
-            .order_by(
-                GymVerificationDocument.document_type.asc()
-            )
+            .order_by(GymVerificationDocument.document_type.asc())
         )
 
         result = await self.session.execute(statement)
@@ -361,12 +360,9 @@ class GymVerificationRepository:
         gym_id: UUID,
         document_type: GymVerificationDocumentType,
     ) -> GymVerificationDocument | None:
-        statement = select(
-            GymVerificationDocument
-        ).where(
+        statement = select(GymVerificationDocument).where(
             GymVerificationDocument.gym_id == gym_id,
-            GymVerificationDocument.document_type
-            == document_type,
+            GymVerificationDocument.document_type == document_type,
         )
 
         result = await self.session.execute(statement)
@@ -378,18 +374,19 @@ class GymVerificationRepository:
         *,
         gym_id: UUID,
         user_id: UUID,
+        document_type: GymVerificationDocumentType,
         payload: CreateGymVerificationDocumentRequest,
     ) -> GymVerificationDocument:
         document = await self.get_document_by_type(
             gym_id=gym_id,
-            document_type=payload.document_type,
+            document_type=document_type,
         )
 
         if document is None:
             document = GymVerificationDocument(
                 gym_id=gym_id,
                 uploaded_by_user_id=user_id,
-                document_type=payload.document_type,
+                document_type=document_type,
                 document_name=payload.document_name,
                 storage_key=payload.storage_key,
                 file_url=payload.file_url,
@@ -418,9 +415,7 @@ class GymVerificationRepository:
         gym_id: UUID,
         document_id: UUID,
     ) -> GymVerificationDocument | None:
-        statement = select(
-            GymVerificationDocument
-        ).where(
+        statement = select(GymVerificationDocument).where(
             GymVerificationDocument.id == document_id,
             GymVerificationDocument.gym_id == gym_id,
         )
@@ -434,14 +429,14 @@ class GymVerificationRepository:
         *,
         gym_id: UUID,
         reviewer_user_id: UUID,
-        decision: GymVerificationReviewDecision,
+        decision: GymVerificationDecision,
         notes: str | None,
         rejection_reason: str | None,
     ) -> GymVerificationReview:
         review = GymVerificationReview(
             gym_id=gym_id,
             reviewed_by_user_id=reviewer_user_id,
-            decision=decision.value,
+            decision=decision,
             notes=notes,
             rejection_reason=rejection_reason,
         )
@@ -449,3 +444,28 @@ class GymVerificationRepository:
         self.session.add(review)
 
         return review
+
+    async def list_reviews(self, gym_id: UUID) -> Sequence[GymVerificationReview]:
+        statement = (
+            select(GymVerificationReview)
+            .where(GymVerificationReview.gym_id == gym_id)
+            .order_by(GymVerificationReview.reviewed_at.asc())
+        )
+        result = await self.session.execute(statement)
+        return result.scalars().all()
+
+    async def list_gyms_by_status(
+        self, *, status: GymVerificationStatus, limit: int, offset: int
+    ) -> tuple[list[Gym], int]:
+        statement = select(Gym).where(Gym.verification_status == status)
+        items_result = await self.session.execute(
+            statement.order_by(Gym.verification_submitted_at.desc().nullslast())
+            .limit(limit)
+            .offset(offset)
+        )
+        total_result = await self.session.execute(
+            select(func.count())
+            .select_from(Gym)
+            .where(Gym.verification_status == status)
+        )
+        return list(items_result.scalars().all()), int(total_result.scalar_one())

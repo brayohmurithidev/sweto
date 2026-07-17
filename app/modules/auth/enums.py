@@ -60,6 +60,10 @@ class AuthEventType(StrEnum):
     ADMIN_STATUS_CHANGED = "admin_status_changed"
     ADMIN_ROLE_CHANGED = "admin_role_changed"
     ADMIN_OPERATION_BLOCKED = "admin_operation_blocked"
+    GYM_VERIFICATION_DOCUMENT_REGISTERED = "gym_verification_document_registered"
+    GYM_VERIFICATION_SUBMITTED = "gym_verification_submitted"
+    GYM_VERIFICATION_APPROVED = "gym_verification_approved"
+    GYM_VERIFICATION_REJECTED = "gym_verification_rejected"
 
     TOKEN_REFRESHED = "token_refreshed"
     TOKEN_REFRESH_FAILED = "token_refresh_failed"

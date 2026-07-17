@@ -16,6 +16,7 @@ from app.core.exceptions import (
     gym_already_exists_handler,
     gym_not_found_handler,
     gym_slug_conflict_handler,
+    gym_verification_error_handler,
     invalid_access_token_handler,
     invalid_email_or_password_handler,
     invalid_otp_handler,
@@ -79,6 +80,15 @@ from app.modules.gyms.exceptions import (
     GymAlreadyExistsError,
     GymNotFoundError,
     GymSlugConflictError,
+    GymVerificationAccessDeniedError,
+    GymVerificationAlreadyApprovedError,
+    GymVerificationAlreadyPendingError,
+    GymVerificationDocumentInvalidError,
+    GymVerificationDocumentNotFoundError,
+    GymVerificationNotPendingError,
+    GymVerificationRejectionReasonRequiredError,
+    GymVerificationRequirementsError,
+    GymVerificationReviewInProgressError,
 )
 from app.modules.profiles.exceptions import (
     InvalidProfileUpdateError,
@@ -251,6 +261,20 @@ def create_application() -> FastAPI:
         GymAccessDeniedError,
         gym_access_denied_handler,
     )
+    for verification_exception in (
+        GymVerificationDocumentNotFoundError,
+        GymVerificationDocumentInvalidError,
+        GymVerificationRequirementsError,
+        GymVerificationAlreadyPendingError,
+        GymVerificationAlreadyApprovedError,
+        GymVerificationReviewInProgressError,
+        GymVerificationNotPendingError,
+        GymVerificationRejectionReasonRequiredError,
+        GymVerificationAccessDeniedError,
+    ):
+        application.add_exception_handler(
+            verification_exception, gym_verification_error_handler
+        )
 
     application.add_exception_handler(
         GymAlreadyExistsError,

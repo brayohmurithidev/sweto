@@ -1,29 +1,40 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.auth.audit import AuthAuditLogger
+from app.modules.auth.enums import AuthEventOutcome, AuthEventType, UserRole
 from app.modules.auth.models import User
 from app.modules.auth.phone import normalize_phone_number
+from app.modules.gyms.constants import (
+    ALLOWED_GYM_VERIFICATION_MIME_TYPES,
+    MAX_GYM_VERIFICATION_FILE_SIZE_BYTES,
+    REQUIRED_GYM_VERIFICATION_DOCUMENT_TYPES,
+)
 from app.modules.gyms.enums import (
     GymOnboardingStep,
     GymStaffRole,
     GymStaffStatus,
     GymStatus,
+    GymVerificationDecision,
+    GymVerificationDocumentType,
     GymVerificationStatus,
 )
-from app.modules.gyms.constants import REQUIRED_VERIFICATION_DOCUMENT_TYPES
 from app.modules.gyms.exceptions import (
     AmenityNotFoundError,
     GymAccessDeniedError,
     GymAlreadyExistsError,
     GymNotFoundError,
     GymSlugConflictError,
+    GymVerificationAccessDeniedError,
+    GymVerificationAlreadyApprovedError,
     GymVerificationAlreadyPendingError,
-    GymVerificationReviewError,
+    GymVerificationDocumentInvalidError,
+    GymVerificationNotPendingError,
+    GymVerificationRejectionReasonRequiredError,
     GymVerificationRequirementsError,
-    GymVerificationDocumentNotFoundError
+    GymVerificationReviewInProgressError,
 )
 from app.modules.gyms.models import (
     Amenity,
@@ -33,7 +44,8 @@ from app.modules.gyms.models import (
     GymMembershipPlanBenefit,
     GymOperatingHours,
     GymStaff,
-    GymVerificationDocument
+    GymVerificationDocument,
+    GymVerificationReview,
 )
 from app.modules.gyms.repository import (
     AmenityRepository,
@@ -47,6 +59,7 @@ from app.modules.gyms.schemas import (
     AmenityData,
     CreateGymData,
     CreateGymRequest,
+    CreateGymVerificationDocumentRequest,
     GymData,
     GymDayPassData,
     GymMembershipBenefitData,
@@ -54,9 +67,12 @@ from app.modules.gyms.schemas import (
     GymOnboardingData,
     GymOperatingHoursData,
     GymPricingData,
-    CreateGymVerificationDocumentRequest,
-    GymVerificationDocumentData,
     GymVerificationData,
+    GymVerificationDocumentData,
+    GymVerificationListData,
+    GymVerificationReviewData,
+    GymVerificationReviewRequest,
+    GymVerificationSummaryData,
     UpdateGymAmenitiesData,
     UpdateGymAmenitiesRequest,
     UpdateGymBusinessDetailsData,
@@ -67,12 +83,6 @@ from app.modules.gyms.schemas import (
     UpdateGymOperatingHoursRequest,
     UpdateGymPricingData,
     UpdateGymPricingRequest,
-    SubmitGymVerificationRequest,
-    GymVerificationDocumentType,
-    GymVerificationReviewData,
-    GymVerificationReviewDecision,
-    GymVerificationStatus,
-    ReviewGymVerificationRequest
 )
 from app.modules.gyms.slug import slugify
 from app.modules.profiles.enums import (
@@ -109,6 +119,7 @@ class GymService:
         self.profile_repository = UserProfileRepository(session)
         self.role_repository = UserAccountRoleRepository(session)
         self.verification_repository = GymVerificationRepository(session)
+        self.audit_logger = AuthAuditLogger(session)
 
     async def create_gym(
         self,
@@ -777,6 +788,7 @@ class GymService:
         *,
         user_id: UUID,
         gym_id: UUID,
+        document_type: GymVerificationDocumentType,
         payload: CreateGymVerificationDocumentRequest,
     ) -> GymVerificationDocumentData:
         """Register or replace a verification document."""
@@ -787,13 +799,17 @@ class GymService:
         )
 
         if membership is None:
-            raise GymAccessDeniedError("You do not have access to this gym.")
+            raise GymVerificationAccessDeniedError(
+                "You do not have access to this gym verification."
+            )
 
         if membership.role not in {
             GymStaffRole.OWNER,
             GymStaffRole.MANAGER,
         }:
-            raise GymAccessDeniedError("You do not have permission to update this gym.")
+            raise GymVerificationAccessDeniedError(
+                "Only an owner or manager may update verification documents."
+            )
 
         gym = await self.gym_repository.get_by_id_for_update(gym_id)
 
@@ -801,85 +817,78 @@ class GymService:
             raise GymNotFoundError("The requested gym was not found.")
 
         if gym.verification_status == GymVerificationStatus.PENDING:
-            raise GymVerificationAlreadyPendingError(
+            raise GymVerificationReviewInProgressError(
                 "Verification documents cannot be changed "
                 "while the gym is under review."
+            )
+        if gym.verification_status == GymVerificationStatus.APPROVED:
+            raise GymVerificationAlreadyApprovedError(
+                "Approved verification documents cannot be changed."
+            )
+        if payload.mime_type not in ALLOWED_GYM_VERIFICATION_MIME_TYPES:
+            raise GymVerificationDocumentInvalidError(
+                "The document MIME type is not supported."
+            )
+        if not 1 <= payload.file_size_bytes <= MAX_GYM_VERIFICATION_FILE_SIZE_BYTES:
+            raise GymVerificationDocumentInvalidError(
+                "The document file size must be between 1 byte and 10 MB."
             )
 
         document = await self.verification_repository.create_or_replace_document(
             gym_id=gym.id,
             user_id=user_id,
+            document_type=document_type,
             payload=payload,
         )
 
-        if gym.verification_status == GymVerificationStatus.REJECTED:
-            gym.verification_status = GymVerificationStatus.NOT_SUBMITTED
-            gym.verification_rejection_reason = None
-            gym.verification_reviewed_at = None
+        self.audit_logger.record(
+            event_type=AuthEventType.GYM_VERIFICATION_DOCUMENT_REGISTERED,
+            outcome=AuthEventOutcome.SUCCESS,
+            user_id=user_id,
+            metadata={"gym_id": str(gym.id), "document_type": document_type.value},
+        )
 
         await self.session.commit()
         await self.session.refresh(document)
 
         return self._build_verification_document_data(document)
-    
 
     async def get_verification(
-    self,
-    *,
-    user_id: UUID,
-    gym_id: UUID,
-) -> GymVerificationData:
+        self,
+        *,
+        user: User,
+        gym_id: UUID,
+    ) -> GymVerificationData:
         """Return verification status and uploaded documents."""
 
         membership = await self.staff_repository.get_user_membership(
-            user_id=user_id,
+            user_id=user.id,
             gym_id=gym_id,
         )
 
-        if membership is None:
-            raise GymAccessDeniedError(
-                "You do not have access to this gym."
+        is_platform_reviewer = user.role in {UserRole.ADMIN, UserRole.SUPER_ADMIN}
+        is_owner_or_manager = membership is not None and membership.role in {
+            GymStaffRole.OWNER,
+            GymStaffRole.MANAGER,
+        }
+        if not is_platform_reviewer and not is_owner_or_manager:
+            raise GymVerificationAccessDeniedError(
+                "You do not have access to this gym verification."
             )
 
         gym = await self.gym_repository.get_by_id(gym_id)
 
         if gym is None:
-            raise GymNotFoundError(
-                "The requested gym was not found."
-            )
+            raise GymNotFoundError("The requested gym was not found.")
 
-        documents = (
-            await self.verification_repository.list_documents(
-                gym.id
-            )
-        )
-
-        return GymVerificationData(
-            gym_id=gym.id,
-            verification_status=gym.verification_status,
-            submitted_at=gym.verification_submitted_at,
-            reviewed_at=gym.verification_reviewed_at,
-            rejection_reason=(
-                gym.verification_rejection_reason
-            ),
-            documents=[
-                self._build_verification_document_data(
-                    document
-                )
-                for document in documents
-            ],
-            onboarding=self._build_onboarding_data(gym),
-        )
-
-
+        return await self._build_verification_data(gym)
 
     async def submit_verification(
-    self,
-    *,
-    user_id: UUID,
-    gym_id: UUID,
-    payload: SubmitGymVerificationRequest,
-) -> GymVerificationData:
+        self,
+        *,
+        user_id: UUID,
+        gym_id: UUID,
+    ) -> GymVerificationData:
         """Submit the gym for administrative verification."""
 
         membership = await self.staff_repository.get_user_membership(
@@ -888,7 +897,7 @@ class GymService:
         )
 
         if membership is None:
-            raise GymAccessDeniedError(
+            raise GymVerificationAccessDeniedError(
                 "You do not have access to this gym."
             )
 
@@ -896,62 +905,38 @@ class GymService:
             GymStaffRole.OWNER,
             GymStaffRole.MANAGER,
         }:
-            raise GymAccessDeniedError(
+            raise GymVerificationAccessDeniedError(
                 "You do not have permission to submit this gym."
             )
 
-        gym = await self.gym_repository.get_by_id_for_update(
-            gym_id
-        )
+        gym = await self.gym_repository.get_by_id_for_update(gym_id)
 
         if gym is None:
-            raise GymNotFoundError(
-                "The requested gym was not found."
-            )
+            raise GymNotFoundError("The requested gym was not found.")
 
-        if (
-            gym.verification_status
-            == GymVerificationStatus.PENDING
-        ):
+        if gym.verification_status == GymVerificationStatus.PENDING:
             raise GymVerificationAlreadyPendingError(
                 "This gym is already under review."
             )
 
-        if (
-            gym.verification_status
-            == GymVerificationStatus.APPROVED
-        ):
-            raise GymVerificationReviewError(
+        if gym.verification_status == GymVerificationStatus.APPROVED:
+            raise GymVerificationAlreadyApprovedError(
                 "This gym has already been approved."
             )
 
-        documents = (
-            await self.verification_repository.list_documents(
-                gym.id
-            )
-        )
+        documents = await self.verification_repository.list_documents(gym.id)
 
         submitted_document_types = {
-            document.document_type
-            for document in documents
-            if document.is_active
+            document.document_type for document in documents if document.is_active
         }
 
         missing_document_types = (
-            REQUIRED_VERIFICATION_DOCUMENT_TYPES
-            - submitted_document_types
+            REQUIRED_GYM_VERIFICATION_DOCUMENT_TYPES - submitted_document_types
         )
 
         if missing_document_types:
-            missing = ", ".join(
-                sorted(
-                    item.value
-                    for item in missing_document_types
-                )
-            )
-
             raise GymVerificationRequirementsError(
-                f"Missing required documents: {missing}."
+                sorted(item.value for item in missing_document_types)
             )
 
         now = datetime.now(UTC)
@@ -963,117 +948,167 @@ class GymService:
         gym.onboarding_step = GymOnboardingStep.VERIFICATION
         gym.onboarding_completed = False
 
+        self.audit_logger.record(
+            event_type=AuthEventType.GYM_VERIFICATION_SUBMITTED,
+            outcome=AuthEventOutcome.SUCCESS,
+            user_id=user_id,
+            metadata={"gym_id": str(gym.id)},
+        )
+
         await self.session.commit()
         await self.session.refresh(gym)
 
-        return GymVerificationData(
-            gym_id=gym.id,
-            verification_status=gym.verification_status,
-            submitted_at=gym.verification_submitted_at,
-            reviewed_at=gym.verification_reviewed_at,
-            rejection_reason=None,
-            documents=[
-                self._build_verification_document_data(
-                    document
-                )
-                for document in documents
-            ],
-            onboarding=self._build_onboarding_data(gym),
-        )
-    
+        return await self._build_verification_data(gym)
 
     async def review_verification(
-    self,
-    *,
-    reviewer_user_id: UUID,
-    gym_id: UUID,
-    payload: ReviewGymVerificationRequest,
-) -> GymVerificationReviewData:
+        self,
+        *,
+        reviewer: User,
+        gym_id: UUID,
+        payload: GymVerificationReviewRequest,
+    ) -> GymVerificationData:
         """Approve or reject a gym verification submission."""
 
-        reviewer = await self.user_repository.get_by_id(
-            reviewer_user_id
-        )
-
-        if reviewer is None:
-            raise GymAccessDeniedError(
-                "Reviewer account was not found."
+        if reviewer.role not in {UserRole.ADMIN, UserRole.SUPER_ADMIN}:
+            raise GymVerificationAccessDeniedError(
+                "Only platform administrators can review gym verification."
             )
 
-        if reviewer.role != UserRole.ADMIN:
-            raise GymAccessDeniedError(
-                "Only administrators can review gym verification."
-            )
-
-        gym = await self.gym_repository.get_by_id_for_update(
-            gym_id
-        )
+        gym = await self.gym_repository.get_by_id_for_update(gym_id)
 
         if gym is None:
-            raise GymNotFoundError(
-                "The requested gym was not found."
+            raise GymNotFoundError("The requested gym was not found.")
+
+        if gym.verification_status != GymVerificationStatus.PENDING:
+            raise GymVerificationNotPendingError(
+                "Only pending verification submissions can be reviewed."
             )
 
         if (
-            gym.verification_status
-            != GymVerificationStatus.PENDING
+            payload.decision == GymVerificationDecision.REJECT
+            and not payload.rejection_reason
         ):
-            raise GymVerificationReviewError(
-                "Only pending verification submissions "
-                "can be reviewed."
+            raise GymVerificationRejectionReasonRequiredError(
+                "A rejection reason is required."
             )
 
         now = datetime.now(UTC)
 
         review = await self.verification_repository.create_review(
             gym_id=gym.id,
-            reviewer_user_id=reviewer_user_id,
+            reviewer_user_id=reviewer.id,
             decision=payload.decision,
             notes=payload.notes,
             rejection_reason=payload.rejection_reason,
         )
+        await self.session.flush()
 
-        if (
-            payload.decision
-            == GymVerificationReviewDecision.APPROVE
-        ):
-            gym.verification_status = (
-                GymVerificationStatus.APPROVED
-            )
+        if payload.decision == GymVerificationDecision.APPROVE:
+            gym.verification_status = GymVerificationStatus.APPROVED
             gym.status = GymStatus.ACTIVE
             gym.onboarding_step = GymOnboardingStep.COMPLETED
             gym.onboarding_completed = True
             gym.verification_rejection_reason = None
+            event_type = AuthEventType.GYM_VERIFICATION_APPROVED
         else:
-            gym.verification_status = (
-                GymVerificationStatus.REJECTED
-            )
+            gym.verification_status = GymVerificationStatus.REJECTED
             gym.status = GymStatus.DRAFT
             gym.onboarding_step = GymOnboardingStep.VERIFICATION
             gym.onboarding_completed = False
-            gym.verification_rejection_reason = (
-                payload.rejection_reason
-            )
+            gym.verification_rejection_reason = payload.rejection_reason
+            event_type = AuthEventType.GYM_VERIFICATION_REJECTED
 
         gym.verification_reviewed_at = now
 
+        self.audit_logger.record(
+            event_type=event_type,
+            outcome=AuthEventOutcome.SUCCESS,
+            user_id=reviewer.id,
+            metadata={
+                "gym_id": str(gym.id),
+                "decision": payload.decision.value,
+                "review_id": str(review.id),
+            },
+        )
+
         await self.session.commit()
         await self.session.refresh(gym)
-        await self.session.refresh(review)
+        return await self._build_verification_data(gym)
 
+    async def list_verifications(
+        self,
+        *,
+        reviewer: User,
+        status: GymVerificationStatus,
+        limit: int,
+        offset: int,
+    ) -> GymVerificationListData:
+        if reviewer.role not in {UserRole.ADMIN, UserRole.SUPER_ADMIN}:
+            raise GymVerificationAccessDeniedError(
+                "Only platform administrators can list gym verification submissions."
+            )
+        gyms, total = await self.verification_repository.list_gyms_by_status(
+            status=status, limit=limit, offset=offset
+        )
+        summaries: list[GymVerificationSummaryData] = []
+        for gym in gyms:
+            documents = await self.verification_repository.list_documents(gym.id)
+            present = {document.document_type for document in documents}
+            missing = sorted(
+                REQUIRED_GYM_VERIFICATION_DOCUMENT_TYPES - present,
+                key=lambda item: item.value,
+            )
+            summaries.append(
+                GymVerificationSummaryData(
+                    gym_id=gym.id,
+                    gym_name=gym.name,
+                    verification_status=gym.verification_status,
+                    verification_submitted_at=gym.verification_submitted_at,
+                    verification_reviewed_at=gym.verification_reviewed_at,
+                    missing_required_document_types=missing,
+                )
+            )
+        return GymVerificationListData(
+            gyms=summaries, total=total, limit=limit, offset=offset
+        )
+
+    async def _build_verification_data(self, gym: Gym) -> GymVerificationData:
+        documents = await self.verification_repository.list_documents(gym.id)
+        reviews = await self.verification_repository.list_reviews(gym.id)
+        present = {document.document_type for document in documents}
+        return GymVerificationData(
+            gym_id=gym.id,
+            verification_status=gym.verification_status,
+            verification_submitted_at=gym.verification_submitted_at,
+            verification_reviewed_at=gym.verification_reviewed_at,
+            verification_rejection_reason=gym.verification_rejection_reason,
+            required_document_types=sorted(
+                REQUIRED_GYM_VERIFICATION_DOCUMENT_TYPES,
+                key=lambda item: item.value,
+            ),
+            missing_required_document_types=sorted(
+                REQUIRED_GYM_VERIFICATION_DOCUMENT_TYPES - present,
+                key=lambda item: item.value,
+            ),
+            documents=[
+                self._build_verification_document_data(item) for item in documents
+            ],
+            review_history=[self._build_review_data(item) for item in reviews],
+            onboarding=self._build_onboarding_data(gym),
+        )
+
+    @staticmethod
+    def _build_review_data(review: GymVerificationReview) -> GymVerificationReviewData:
         return GymVerificationReviewData(
             id=review.id,
-            gym_id=gym.id,
-            decision=GymVerificationReviewDecision(
-                review.decision
-            ),
+            gym_id=review.gym_id,
+            decision=review.decision,
             notes=review.notes,
             rejection_reason=review.rejection_reason,
             reviewed_by_user_id=review.reviewed_by_user_id,
             reviewed_at=review.reviewed_at,
-            onboarding=self._build_onboarding_data(gym),
         )
-    
+
     @staticmethod
     def _build_verification_document_data(
         document: GymVerificationDocument,
@@ -1087,9 +1122,7 @@ class GymService:
             mime_type=document.mime_type,
             file_size_bytes=document.file_size_bytes,
             is_active=document.is_active,
-            uploaded_by_user_id=(
-                document.uploaded_by_user_id
-            ),
+            uploaded_by_user_id=(document.uploaded_by_user_id),
             created_at=document.created_at,
             updated_at=document.updated_at,
         )

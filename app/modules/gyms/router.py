@@ -7,14 +7,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings, get_settings
 from app.database.session import get_db_session
 from app.modules.auth.dependencies import CurrentUser
+from app.modules.gyms.enums import GymVerificationDocumentType
 from app.modules.gyms.schemas import (
     AmenityData,
     CreateGymData,
     CreateGymRequest,
+    CreateGymVerificationDocumentRequest,
     GymData,
     GymOnboardingData,
     GymOperatingHoursData,
     GymPricingData,
+    GymVerificationData,
+    GymVerificationDocumentData,
     UpdateGymAmenitiesData,
     UpdateGymAmenitiesRequest,
     UpdateGymBusinessDetailsData,
@@ -323,3 +327,64 @@ async def update_gym_pricing(
     )
 
     return APIResponse(data=data)
+
+
+@router.put(
+    "/{gym_id}/verification/documents/{document_type}",
+    response_model=APIResponse[GymVerificationDocumentData],
+)
+async def register_verification_document(
+    gym_id: UUID,
+    document_type: GymVerificationDocumentType,
+    payload: CreateGymVerificationDocumentRequest,
+    current_user: CurrentUser,
+    session: DatabaseSession,
+    settings: ApplicationSettings,
+) -> APIResponse[GymVerificationDocumentData]:
+    service = GymService(
+        session=session, default_phone_region=settings.default_phone_region
+    )
+    return APIResponse(
+        data=await service.create_verification_document(
+            user_id=current_user.id,
+            gym_id=gym_id,
+            document_type=document_type,
+            payload=payload,
+        )
+    )
+
+
+@router.get(
+    "/{gym_id}/verification",
+    response_model=APIResponse[GymVerificationData],
+)
+async def get_gym_verification(
+    gym_id: UUID,
+    current_user: CurrentUser,
+    session: DatabaseSession,
+    settings: ApplicationSettings,
+) -> APIResponse[GymVerificationData]:
+    service = GymService(
+        session=session, default_phone_region=settings.default_phone_region
+    )
+    return APIResponse(
+        data=await service.get_verification(user=current_user, gym_id=gym_id)
+    )
+
+
+@router.post(
+    "/{gym_id}/verification/submit",
+    response_model=APIResponse[GymVerificationData],
+)
+async def submit_gym_verification(
+    gym_id: UUID,
+    current_user: CurrentUser,
+    session: DatabaseSession,
+    settings: ApplicationSettings,
+) -> APIResponse[GymVerificationData]:
+    service = GymService(
+        session=session, default_phone_region=settings.default_phone_region
+    )
+    return APIResponse(
+        data=await service.submit_verification(user_id=current_user.id, gym_id=gym_id)
+    )

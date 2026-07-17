@@ -32,6 +32,7 @@ from app.modules.gyms.enums import (
     GymStaffRole,
     GymStaffStatus,
     GymStatus,
+    GymVerificationDecision,
     GymVerificationDocumentType,
     GymVerificationStatus,
     MembershipBillingPeriod,
@@ -263,7 +264,7 @@ class Gym(
     verification_reviews: Mapped[list["GymVerificationReview"]] = relationship(
         back_populates="gym",
         cascade="all, delete-orphan",
-        order_by="GymVerificationReview.reviewed_at.desc()",
+        order_by="GymVerificationReview.reviewed_at.asc()",
     )
 
 
@@ -773,7 +774,10 @@ class GymVerificationDocument(
     )
 
     document_type: Mapped[GymVerificationDocumentType] = mapped_column(
-        String(50),
+        string_enum(
+            GymVerificationDocumentType,
+            name="gym_verification_document_type",
+        ),
         nullable=False,
     )
 
@@ -798,6 +802,7 @@ class GymVerificationDocument(
     )
 
     file_size_bytes: Mapped[int] = mapped_column(
+        Integer,
         nullable=False,
     )
 
@@ -859,8 +864,11 @@ class GymVerificationReview(
         nullable=False,
     )
 
-    decision: Mapped[str] = mapped_column(
-        String(20),
+    decision: Mapped[GymVerificationDecision] = mapped_column(
+        string_enum(
+            GymVerificationDecision,
+            name="gym_verification_decision",
+        ),
         nullable=False,
     )
 
@@ -891,7 +899,7 @@ class GymVerificationReview(
         ),
         CheckConstraint(
             """
-            decision = 'approve'
+            (decision = 'approve' AND rejection_reason IS NULL)
             OR (
                 decision = 'reject'
                 AND rejection_reason IS NOT NULL

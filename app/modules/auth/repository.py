@@ -114,9 +114,7 @@ class UserRepository:
 
     async def get_by_email_for_update(self, email: str) -> User | None:
         statement = (
-            select(User)
-            .where(User.email == normalize_email(email))
-            .with_for_update()
+            select(User).where(User.email == normalize_email(email)).with_for_update()
         )
         result = await self.session.execute(statement)
         return result.scalar_one_or_none()
@@ -131,9 +129,7 @@ class UserRepository:
     async def acquire_super_admin_bootstrap_lock(self) -> None:
         """Serialize bootstrap attempts, including when no row exists yet."""
 
-        await self.session.execute(
-            text("SELECT pg_advisory_xact_lock(731947201)")
-        )
+        await self.session.execute(text("SELECT pg_advisory_xact_lock(731947201)"))
 
     async def list_platform_admins(
         self, *, limit: int, offset: int
