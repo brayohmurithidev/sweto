@@ -86,8 +86,9 @@ class GymOnboardingData(BaseModel):
     verification_status: GymVerificationStatus
     onboarding_step: GymOnboardingStep
     onboarding_completed: bool
-    next_step: str
+    next_step: str | None
     limited_access: bool
+    verification_rejection_reason: str | None
 
 
 class CreateGymData(BaseModel):

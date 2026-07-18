@@ -31,6 +31,7 @@ class GymOnboardingStep(StrEnum):
     OPERATING_HOURS = "operating_hours"
     PRICING = "pricing"
     VERIFICATION = "verification"
+    WAITING_FOR_VERIFICATION = "waiting_for_verification"
     COMPLETED = "completed"
 
 

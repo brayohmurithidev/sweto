@@ -97,6 +97,60 @@ def service() -> GymService:
     return GymService(session=session_mock(), default_phone_region="KE")
 
 
+@pytest.mark.parametrize(
+    ("status", "expected_step", "expected_next", "expected_limited"),
+    [
+        (
+            GymVerificationStatus.NOT_SUBMITTED,
+            GymOnboardingStep.VERIFICATION,
+            "verification",
+            True,
+        ),
+        (
+            GymVerificationStatus.PENDING,
+            GymOnboardingStep.WAITING_FOR_VERIFICATION,
+            None,
+            True,
+        ),
+        (
+            GymVerificationStatus.APPROVED,
+            GymOnboardingStep.COMPLETED,
+            "limited_dashboard",
+            False,
+        ),
+        (
+            GymVerificationStatus.REJECTED,
+            GymOnboardingStep.VERIFICATION,
+            "verification",
+            True,
+        ),
+    ],
+)
+def test_onboarding_is_driven_by_verification_status(
+    status: GymVerificationStatus,
+    expected_step: GymOnboardingStep,
+    expected_next: str | None,
+    expected_limited: bool,
+) -> None:
+    current_gym = gym(status)
+    current_gym.verification_rejection_reason = (
+        "Replace the registration document."
+        if status == GymVerificationStatus.REJECTED
+        else None
+    )
+
+    onboarding = GymService._build_onboarding_data(current_gym)
+
+    assert onboarding.onboarding_step == expected_step
+    assert onboarding.next_step == expected_next
+    assert onboarding.limited_access is expected_limited
+    assert onboarding.onboarding_completed is (status == GymVerificationStatus.APPROVED)
+    assert (
+        onboarding.verification_rejection_reason
+        == current_gym.verification_rejection_reason
+    )
+
+
 def payload(**overrides: object) -> CreateGymVerificationDocumentRequest:
     values: dict[str, object] = {
         "document_name": "Registration",

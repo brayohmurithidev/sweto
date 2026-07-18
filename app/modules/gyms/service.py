@@ -344,20 +344,37 @@ class GymService:
         cls,
         gym: Gym,
     ) -> GymOnboardingData:
+        onboarding_step = gym.onboarding_step
+        next_step: str | None = cls._resolve_next_step(onboarding_step)
+        if gym.verification_status == GymVerificationStatus.PENDING:
+            onboarding_step = GymOnboardingStep.WAITING_FOR_VERIFICATION
+            next_step = None
+        elif gym.verification_status == GymVerificationStatus.APPROVED:
+            onboarding_step = GymOnboardingStep.COMPLETED
+            next_step = cls._resolve_next_step(onboarding_step)
+        elif gym.verification_status in {
+            GymVerificationStatus.NOT_SUBMITTED,
+            GymVerificationStatus.REJECTED,
+        }:
+            onboarding_step = GymOnboardingStep.VERIFICATION
+            next_step = GymOnboardingStep.VERIFICATION.value
         return GymOnboardingData(
             gym_id=gym.id,
             status=gym.status,
             verification_status=gym.verification_status,
-            onboarding_step=gym.onboarding_step,
-            onboarding_completed=gym.onboarding_completed,
-            next_step=cls._resolve_next_step(gym.onboarding_step),
+            onboarding_step=onboarding_step,
+            onboarding_completed=(
+                gym.verification_status == GymVerificationStatus.APPROVED
+            ),
+            next_step=next_step,
             limited_access=(gym.verification_status != GymVerificationStatus.APPROVED),
+            verification_rejection_reason=gym.verification_rejection_reason,
         )
 
     @staticmethod
     def _resolve_next_step(
         step: GymOnboardingStep,
-    ) -> str:
+    ) -> str | None:
         mapping = {
             GymOnboardingStep.BASIC_INFORMATION: ("basic_information"),
             GymOnboardingStep.LOCATION: "location",
@@ -366,6 +383,7 @@ class GymService:
             GymOnboardingStep.OPERATING_HOURS: ("operating_hours"),
             GymOnboardingStep.PRICING: "pricing",
             GymOnboardingStep.VERIFICATION: ("verification"),
+            GymOnboardingStep.WAITING_FOR_VERIFICATION: None,
             GymOnboardingStep.COMPLETED: ("limited_dashboard"),
         }
 
@@ -1245,7 +1263,7 @@ class GymService:
         gym.verification_submitted_at = now
         gym.verification_reviewed_at = None
         gym.verification_rejection_reason = None
-        gym.onboarding_step = GymOnboardingStep.VERIFICATION
+        gym.onboarding_step = GymOnboardingStep.WAITING_FOR_VERIFICATION
         gym.onboarding_completed = False
 
         self.audit_logger.record(
