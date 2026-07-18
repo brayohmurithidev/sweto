@@ -34,3 +34,16 @@ aws s3api get-bucket-lifecycle-configuration --bucket "$AWS_S3_UPLOADS_BUCKET"
 Deploy by applying the migration, setting the bucket/role configuration, and verifying
 presigned upload, completion, download, replacement, and cleanup with harmless test
 files. Database downgrade does not delete S3 objects; remove test objects separately.
+
+## Development Swagger/Postman helper
+
+Only `local`, `development`, and `testing` include this route:
+
+```text
+POST /api/v1/dev/gyms/{gym_id}/verification/documents/{document_type}/upload
+```
+
+Use `multipart/form-data` with a single `file` field of type **File** and select a
+PDF, JPEG, or PNG. This route proxies a bounded file through the normal initiate,
+presigned PUT, and completion lifecycle for testing only. It is never included in
+staging or production; production clients must use initiate → direct PUT → complete.

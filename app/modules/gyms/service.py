@@ -60,6 +60,7 @@ from app.modules.gyms.schemas import (
     CreateGymData,
     CreateGymRequest,
     CreateGymVerificationDocumentRequest,
+    DevelopmentStorageUploadData,
     GymData,
     GymDayPassData,
     GymMembershipBenefitData,
@@ -1069,6 +1070,41 @@ class GymService:
         return GymVerificationDownloadData(
             download_url=download.url, expires_at=download.expires_at
         )
+
+    async def get_development_upload_data(
+        self, upload_id: UUID
+    ) -> DevelopmentStorageUploadData:
+        upload = await self.storage_upload_repository.get(upload_id)
+        if upload is None:
+            raise StorageUploadNotFoundError("The upload intent was not found.")
+        return DevelopmentStorageUploadData(
+            upload_id=upload.id,
+            status=upload.status.value,
+            storage_bucket=upload.bucket,
+            storage_key=upload.storage_key,
+            original_filename=upload.original_filename,
+            declared_mime_type=upload.declared_mime_type,
+            declared_size_bytes=upload.declared_size_bytes,
+            verified_mime_type=upload.verified_mime_type,
+            verified_size_bytes=upload.verified_size_bytes,
+            etag=upload.etag,
+            created_at=upload.created_at,
+            completed_at=upload.completed_at,
+        )
+
+    async def fail_verification_upload(self, upload_id: UUID) -> None:
+        """Mark a pending transport failure without registering a document."""
+
+        upload = await self.storage_upload_repository.get_for_update(upload_id)
+        if upload is None or upload.status != UploadStatus.PENDING:
+            return
+        upload.status = UploadStatus.FAILED
+        storage = self._require_storage()
+        try:
+            await storage.delete_object(key=upload.storage_key)
+        except Exception:
+            pass
+        await self.session.commit()
 
     def _require_storage(self) -> S3Storage:
         if self.storage is None:

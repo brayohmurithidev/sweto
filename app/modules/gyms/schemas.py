@@ -601,6 +601,26 @@ class GymVerificationDownloadData(BaseModel):
     expires_at: datetime
 
 
+class DevelopmentStorageUploadData(BaseModel):
+    upload_id: UUID
+    status: str
+    storage_bucket: str
+    storage_key: str
+    original_filename: str
+    declared_mime_type: str
+    declared_size_bytes: int
+    verified_mime_type: str | None
+    verified_size_bytes: int | None
+    etag: str | None
+    created_at: datetime
+    completed_at: datetime | None
+
+
+class DevelopmentVerificationUploadData(BaseModel):
+    upload: DevelopmentStorageUploadData
+    document: GymVerificationDocumentData
+
+
 class GymVerificationData(BaseModel):
     gym_id: UUID
     verification_status: GymVerificationStatus

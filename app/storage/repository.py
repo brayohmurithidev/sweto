@@ -21,6 +21,12 @@ class StorageUploadRepository:
         )
         return result.scalar_one_or_none()
 
+    async def get(self, upload_id: UUID) -> StorageUpload | None:
+        result = await self.session.execute(
+            select(StorageUpload).where(StorageUpload.id == upload_id)
+        )
+        return result.scalar_one_or_none()
+
     async def list_expired_pending(self, now: datetime) -> list[StorageUpload]:
         result = await self.session.execute(
             select(StorageUpload).where(

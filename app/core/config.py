@@ -10,7 +10,9 @@ class Settings(BaseSettings):
 
     app_name: str = "SWETO API"
     app_version: str = "0.1.0"
-    app_environment: Literal["local", "development", "staging", "production"] = "local"
+    app_environment: Literal[
+        "local", "development", "testing", "staging", "production"
+    ] = "local"
     debug: bool = True
 
     api_v1_prefix: str = "/api/v1"

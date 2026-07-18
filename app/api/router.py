@@ -24,3 +24,7 @@ api_router.include_router(auth_router)
 api_router.include_router(account_router)
 api_router.include_router(profile_router)
 api_router.include_router(gym_router)
+if settings.app_environment in {"local", "development", "testing"}:
+    from app.modules.gyms.dev_router import router as development_gym_router
+
+    api_router.include_router(development_gym_router)
