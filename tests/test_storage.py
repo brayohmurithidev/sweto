@@ -42,6 +42,41 @@ def test_storage_requires_bucket(settings: Settings) -> None:
         S3Storage(settings.model_copy(update={"aws_s3_uploads_bucket": None}))
 
 
+def test_aws_credentials_must_be_a_pair(settings: Settings) -> None:
+    values = settings.model_dump()
+    values["aws_access_key_id"] = "access-key-only"
+    values["aws_secret_access_key"] = None
+
+    with pytest.raises(ValueError, match="must be configured together"):
+        Settings.model_validate(values)
+
+
+def test_storage_uses_configured_credential_pair(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = Mock()
+    boto_client = Mock(return_value=client)
+    monkeypatch.setattr("app.storage.s3.boto3.client", boto_client)
+    configured = settings.model_copy(
+        update={
+            "aws_s3_uploads_bucket": "private-uploads",
+            "aws_s3_endpoint_url": "http://localhost:4566",
+            "aws_access_key_id": "access-key",
+            "aws_secret_access_key": "secret-key",
+        }
+    )
+
+    storage = S3Storage(configured)
+
+    assert storage._client is client
+    assert boto_client.call_args.kwargs == {
+        "region_name": configured.aws_region,
+        "endpoint_url": "http://localhost:4566",
+        "aws_access_key_id": "access-key",
+        "aws_secret_access_key": "secret-key",
+    }
+
+
 @pytest.mark.asyncio
 async def test_presigned_upload_binds_key_and_content_type(settings: Settings) -> None:
     storage = S3Storage(storage_settings(settings))

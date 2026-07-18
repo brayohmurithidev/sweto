@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, PostgresDsn
+from pydantic import Field, PostgresDsn, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -65,6 +65,17 @@ class Settings(BaseSettings):
     aws_s3_endpoint_url: str | None = None
     aws_access_key_id: str | None = None
     aws_secret_access_key: str | None = None
+
+    @model_validator(mode="after")
+    def validate_aws_credentials(self) -> "Settings":
+        has_access_key = bool(self.aws_access_key_id)
+        has_secret_key = bool(self.aws_secret_access_key)
+        if has_access_key != has_secret_key:
+            raise ValueError(
+                "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY "
+                "must be configured together."
+            )
+        return self
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore", case_sensitive=False

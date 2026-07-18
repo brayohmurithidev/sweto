@@ -29,11 +29,13 @@ class S3Storage:
         self.bucket = settings.aws_s3_uploads_bucket
         self.upload_expiry_seconds = settings.aws_s3_presigned_upload_expiry_seconds
         self.download_expiry_seconds = settings.aws_s3_presigned_download_expiry_seconds
-        self._client: Any = boto3.client(
-            "s3",
-            region_name=settings.aws_region,
-            endpoint_url=settings.aws_s3_endpoint_url,
-        )
+        client_kwargs: dict[str, Any] = {"region_name": settings.aws_region}
+        if settings.aws_s3_endpoint_url:
+            client_kwargs["endpoint_url"] = settings.aws_s3_endpoint_url
+        if settings.aws_access_key_id and settings.aws_secret_access_key:
+            client_kwargs["aws_access_key_id"] = settings.aws_access_key_id
+            client_kwargs["aws_secret_access_key"] = settings.aws_secret_access_key
+        self._client: Any = boto3.client("s3", **client_kwargs)
 
     async def create_upload_url(self, *, key: str, mime_type: str) -> PresignedUpload:
         def generate() -> str:
