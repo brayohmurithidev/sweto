@@ -42,13 +42,39 @@ def test_storage_requires_bucket(settings: Settings) -> None:
         S3Storage(settings.model_copy(update={"aws_s3_uploads_bucket": None}))
 
 
-def test_aws_credentials_must_be_a_pair(settings: Settings) -> None:
+@pytest.mark.parametrize(
+    ("access_key", "secret_key"),
+    [("access-key-only", None), (None, "secret-key-only")],
+)
+def test_aws_credentials_must_be_a_pair(
+    settings: Settings, access_key: str | None, secret_key: str | None
+) -> None:
     values = settings.model_dump()
-    values["aws_access_key_id"] = "access-key-only"
-    values["aws_secret_access_key"] = None
+    values["aws_access_key_id"] = access_key
+    values["aws_secret_access_key"] = secret_key
 
     with pytest.raises(ValueError, match="must be configured together"):
         Settings.model_validate(values)
+
+
+def test_storage_uses_default_credential_chain_without_credentials(
+    settings: Settings, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client = Mock()
+    boto_client = Mock(return_value=client)
+    monkeypatch.setattr("app.storage.s3.boto3.client", boto_client)
+    configured = settings.model_copy(
+        update={
+            "aws_s3_uploads_bucket": "private-uploads",
+            "aws_s3_endpoint_url": "",
+            "aws_access_key_id": None,
+            "aws_secret_access_key": None,
+        }
+    )
+
+    S3Storage(configured)
+
+    assert boto_client.call_args.kwargs == {"region_name": configured.aws_region}
 
 
 def test_storage_uses_configured_credential_pair(
