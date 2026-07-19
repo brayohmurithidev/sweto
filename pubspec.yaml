@@ -40,6 +40,11 @@ dependencies:
   flutter_secure_storage: ^10.3.1
   shared_preferences: ^2.5.4
   equatable: ^2.1.0
+  image_picker: ^1.2.0
+  file_selector: ^1.0.3
+  google_maps_flutter: ^2.17.1
+  geolocator: ^14.0.3
+  geocoding: ^5.0.0
 
 dev_dependencies:
   flutter_test:
