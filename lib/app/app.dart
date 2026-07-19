@@ -1,4 +1,6 @@
-import "package:flutter/material.dart";
+import 'package:flutter/material.dart';
+import 'package:sweto_app/core/theme/app_theme.dart';
+import 'package:sweto_app/features/health/presentation/health_check_screen.dart';
 
 class SwetoApp extends StatelessWidget {
   const SwetoApp({super.key});
@@ -6,9 +8,10 @@ class SwetoApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: "SWETO",
+      title: 'SWETO',
       debugShowCheckedModeBanner: false,
-      home: const Scaffold(body: Center(child: Text("SWETO"))),
+      theme: AppTheme.dark(),
+      home: const HealthCheckScreen(),
     );
   }
 }
