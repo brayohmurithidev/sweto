@@ -835,12 +835,12 @@ class GymVerificationDocument(
         nullable=False,
     )
 
-    uploaded_by_user_id: Mapped[UUID] = mapped_column(
+    uploaded_by_user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey(
             "users.id",
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
         ),
-        nullable=False,
+        nullable=True,
     )
 
     gym: Mapped["Gym"] = relationship(
@@ -877,12 +877,12 @@ class GymVerificationReview(
         nullable=False,
     )
 
-    reviewed_by_user_id: Mapped[UUID] = mapped_column(
+    reviewed_by_user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey(
             "users.id",
-            ondelete="RESTRICT",
+            ondelete="SET NULL",
         ),
-        nullable=False,
+        nullable=True,
     )
 
     decision: Mapped[GymVerificationDecision] = mapped_column(

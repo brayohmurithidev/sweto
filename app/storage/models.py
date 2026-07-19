@@ -38,7 +38,7 @@ class StorageUpload(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         string_enum(UploadPurpose, name="upload_purpose"), nullable=False, index=True
     )
     owner_user_id: Mapped[UUID] = mapped_column(
-        ForeignKey("users.id", ondelete="RESTRICT"), nullable=False, index=True
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     gym_id: Mapped[UUID] = mapped_column(
         ForeignKey("gyms.id", ondelete="CASCADE"), nullable=False, index=True
