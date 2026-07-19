@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sweto_app/core/router/app_routes.dart';
 import 'package:sweto_app/core/theme/colors.dart';
 import 'package:sweto_app/core/theme/spacing.dart';
@@ -9,15 +10,17 @@ import 'package:sweto_app/core/theme/text_styles.dart';
 import 'package:sweto_app/shared/widgets/orange_particles.dart';
 import 'package:sweto_app/shared/widgets/sweto_loading_bar.dart';
 import 'package:sweto_app/shared/widgets/sweto_logo.dart';
+import 'package:sweto_app/features/auth/presentation/auth_providers.dart';
+import 'package:sweto_app/features/onboarding/data/onboarding_storage.dart';
 
-class SplashScreen extends StatefulWidget {
+class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
 
   @override
-  State<SplashScreen> createState() => _SplashScreenState();
+  ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen>
+class _SplashScreenState extends ConsumerState<SplashScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _progressController;
 
@@ -32,18 +35,28 @@ class _SplashScreenState extends State<SplashScreen>
       duration: const Duration(milliseconds: 2400),
     )..forward();
 
-    _navigationTimer = Timer(
-      const Duration(milliseconds: 2600),
-      _openOnboarding,
-    );
+    _navigationTimer = Timer(const Duration(milliseconds: 2600), _bootstrap);
   }
 
-  void _openOnboarding() {
+  Future<void> _bootstrap() async {
     if (!mounted) {
       return;
     }
-
-    context.goNamed(AppRoutes.onboardingName);
+    final onboarding = await ref.read(authBootstrapProvider.future);
+    if (!mounted) return;
+    if (onboarding != null) {
+      context.goNamed(
+        onboarding.completed
+            ? AppRoutes.homeName
+            : AppRoutes.profileCompletionName,
+      );
+      return;
+    }
+    final completed = await OnboardingStorage().isCompleted();
+    if (!mounted) return;
+    context.goNamed(
+      completed ? AppRoutes.phoneLoginName : AppRoutes.onboardingName,
+    );
   }
 
   @override

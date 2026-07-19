@@ -9,6 +9,7 @@ const onboardingPages = [
     description:
         'Discover the best gyms in Nairobi, Mombasa, Kampala and beyond — '
         'with real prices in KES.',
+    buttonLabel: 'Next',
   ),
   OnboardingPageData(
     imagePath: 'assets/images/onboarding/book_and_pay.jpg',
@@ -17,6 +18,7 @@ const onboardingPages = [
     description:
         'Reserve your spot and pay instantly with M-Pesa. '
         'No cash, no queues, no hassle.',
+    buttonLabel: 'Next',
   ),
   OnboardingPageData(
     imagePath: 'assets/images/onboarding/find_buddy.jpg',
@@ -25,5 +27,6 @@ const onboardingPages = [
     description:
         'Match with workout partners near you who share your goals. '
         'Sweat together, grow together.',
+    buttonLabel: 'Get Started',
   ),
 ];

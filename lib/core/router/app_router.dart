@@ -1,7 +1,10 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sweto_app/core/router/app_routes.dart';
 import 'package:sweto_app/features/auth/presentation/phone_login_screen.dart';
+import 'package:sweto_app/features/auth/presentation/otp_verification_screen.dart';
+import 'package:sweto_app/features/auth/domain/entities/auth_entities.dart';
 import 'package:sweto_app/features/health/presentation/health_check_screen.dart';
 import 'package:sweto_app/features/onboarding/presentation/onboarding_screen.dart';
 import 'package:sweto_app/features/splash/presentation/splash_screen.dart';
@@ -16,6 +19,27 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           return const SplashScreen();
         },
+      ),
+      GoRoute(
+        path: AppRoutes.otpPath,
+        name: AppRoutes.otpName,
+        builder: (context, state) {
+          final challenge = state.extra;
+          if (challenge is! OtpChallenge) return const PhoneLoginScreen();
+          return OtpVerificationScreen(challenge: challenge);
+        },
+      ),
+      GoRoute(
+        path: AppRoutes.homePath,
+        name: AppRoutes.homeName,
+        builder: (context, state) =>
+            const _AuthenticatedPlaceholder(title: 'Home'),
+      ),
+      GoRoute(
+        path: AppRoutes.profileCompletionPath,
+        name: AppRoutes.profileCompletionName,
+        builder: (context, state) =>
+            const _AuthenticatedPlaceholder(title: 'Complete your profile'),
       ),
       GoRoute(
         path: AppRoutes.onboardingPath,
@@ -41,3 +65,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     ],
   );
 });
+
+class _AuthenticatedPlaceholder extends StatelessWidget {
+  const _AuthenticatedPlaceholder({required this.title});
+  final String title;
+  @override
+  Widget build(BuildContext context) =>
+      Scaffold(body: Center(child: Text(title)));
+}

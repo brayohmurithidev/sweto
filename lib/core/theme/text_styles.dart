@@ -62,6 +62,14 @@ class AppTextStyles {
     color: AppColors.textSecondary,
   );
 
+  static const bodySmall = TextStyle(
+    fontFamily: fontFamily,
+    fontSize: 12,
+    height: 1.45,
+    fontWeight: FontWeight.w400,
+    color: AppColors.textSecondary,
+  );
+
   static const labelLarge = TextStyle(
     fontFamily: fontFamily,
     fontSize: 16,

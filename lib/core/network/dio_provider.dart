@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sweto_app/core/config/config_providers.dart';
 import 'package:sweto_app/core/network/api_error_interceptor.dart';
 import 'package:sweto_app/core/network/auth_interceptor.dart';
+import 'package:sweto_app/core/network/token_refresh_interceptor.dart';
 import 'package:sweto_app/core/storage/storage_providers.dart';
 
 final dioProvider = Provider<Dio>((ref) {
@@ -21,6 +22,7 @@ final dioProvider = Provider<Dio>((ref) {
 
   dio.interceptors.addAll([
     AuthInterceptor(tokenStorage),
+    TokenRefreshInterceptor(tokenStorage, baseUrl: config.apiBaseUrl),
     ApiErrorInterceptor(),
   ]);
 
