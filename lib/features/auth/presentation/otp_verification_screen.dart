@@ -14,6 +14,8 @@ import 'package:sweto_app/features/auth/domain/entities/auth_entities.dart';
 import 'package:sweto_app/features/auth/presentation/auth_providers.dart';
 import 'package:sweto_app/shared/widgets/app_primary_button.dart';
 import 'package:sweto_app/shared/widgets/sweto_logo.dart';
+import 'package:sweto_app/features/gym_owner/presentation/onboarding_coordinator.dart';
+import 'package:sweto_app/features/gym_owner/presentation/gym_owner_screens.dart';
 
 class OtpVerificationScreen extends ConsumerStatefulWidget {
   const OtpVerificationScreen({required this.challenge, super.key});
@@ -110,13 +112,11 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
       await repo.saveTokens(tokens);
       await repo.getMe();
       final onboarding = await repo.getOnboarding();
-      if (mounted) {
-        context.goNamed(
-          onboarding.completed
-              ? AppRoutes.homeName
-              : AppRoutes.profileCompletionName,
-        );
-      }
+      final destination = await ref
+          .read(onboardingCoordinatorProvider)
+          .resolveAccount(onboarding);
+      if (!mounted) return;
+      goToDestination(context, destination);
     } on DioException catch (e) {
       final apiError = e.error;
       await _showVerificationError(

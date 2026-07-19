@@ -146,13 +146,20 @@ class _AuthFake implements AuthRepository {
   @override
   Future<void> clearTokens() async {}
   @override
-  Future<AccountOnboarding> getOnboarding() async =>
-      const AccountOnboarding(completed: true, nextStep: 'done');
+  Future<AccountOnboarding> getOnboarding() async => const AccountOnboarding(
+    roles: [AccountRole.gymOwner],
+    defaultRole: AccountRole.gymOwner,
+    status: AccountOnboardingStatus.completed,
+    completed: true,
+    nextStep: 'dashboard',
+  );
   @override
   Future<AuthUser> getMe() async =>
       const AuthUser(id: 'user', mustChangePassword: false);
   @override
   Future<String?> readRefreshToken() async => null;
+  @override
+  Future<AccountOnboarding> selectGymOwnerRole() => throw UnimplementedError();
   @override
   Future<AuthTokens> refresh(String refreshToken) => throw UnimplementedError();
   @override

@@ -12,6 +12,8 @@ import 'package:sweto_app/shared/widgets/sweto_loading_bar.dart';
 import 'package:sweto_app/shared/widgets/sweto_logo.dart';
 import 'package:sweto_app/features/auth/presentation/auth_providers.dart';
 import 'package:sweto_app/features/onboarding/data/onboarding_storage.dart';
+import 'package:sweto_app/features/gym_owner/presentation/onboarding_coordinator.dart';
+import 'package:sweto_app/features/gym_owner/presentation/gym_owner_screens.dart';
 
 class SplashScreen extends ConsumerStatefulWidget {
   const SplashScreen({super.key});
@@ -45,11 +47,11 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     final onboarding = await ref.read(authBootstrapProvider.future);
     if (!mounted) return;
     if (onboarding != null) {
-      context.goNamed(
-        onboarding.completed
-            ? AppRoutes.homeName
-            : AppRoutes.profileCompletionName,
-      );
+      final destination = await ref
+          .read(onboardingCoordinatorProvider)
+          .resolveAccount(onboarding);
+      if (!mounted) return;
+      goToDestination(context, destination);
       return;
     }
     final completed = await OnboardingStorage().isCompleted();

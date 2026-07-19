@@ -13,6 +13,8 @@ class KenyaPhoneField extends StatelessWidget {
     required this.onChanged,
     this.errorText,
     this.enabled = true,
+    this.fieldKey,
+    this.compact = false,
     super.key,
   });
 
@@ -21,11 +23,13 @@ class KenyaPhoneField extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final String? errorText;
   final bool enabled;
+  final Key? fieldKey;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return TextField(
-      key: const Key('phone-number-field'),
+      key: fieldKey ?? const Key('phone-number-field'),
       controller: controller,
       focusNode: focusNode,
       enabled: enabled,
@@ -47,9 +51,9 @@ class KenyaPhoneField extends StatelessWidget {
         fillColor: AppColors.surface,
         prefixIconConstraints: const BoxConstraints(minWidth: 104),
         prefixIcon: const _KenyaCountryPrefix(),
-        contentPadding: const EdgeInsets.symmetric(
+        contentPadding: EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
-          vertical: 18,
+          vertical: compact ? 11 : 18,
         ),
         hintStyle: AppTextStyles.bodyLarge.copyWith(
           color: AppColors.textMuted,
