@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:sweto_app/core/network/api_endpoints.dart';
 import 'package:sweto_app/core/network/api_response.dart';
 import 'package:sweto_app/core/storage/token_storage.dart';
@@ -63,6 +64,8 @@ class DioAuthRepository implements AuthRepository {
       (data) => AuthUser(
         id: _string(data, 'id'),
         mustChangePassword: data['must_change_password'] == true,
+        phoneNumber: data['phone_number'] as String?,
+        email: data['email'] as String?,
       ),
     );
   }
@@ -72,13 +75,22 @@ class DioAuthRepository implements AuthRepository {
     final response = await _dio.get<Map<String, dynamic>>(
       ApiEndpoints.accountOnboarding,
     );
-    return _envelope(
-      response.data,
-      (data) => AccountOnboarding(
-        completed: data['onboarding_completed'] == true,
-        nextStep: _string(data, 'next_step'),
-      ),
+    if (kDebugMode) {
+      debugPrint('ACCOUNT ONBOARDING RAW RESPONSE: ${response.data}');
+    }
+    return _envelope(response.data, _onboardingFromData);
+  }
+
+  @override
+  Future<AccountOnboarding> selectGymOwnerRole() async {
+    final response = await _dio.post<Map<String, dynamic>>(
+      ApiEndpoints.accountRoles,
+      data: const {'role': 'gym_owner'},
     );
+    if (kDebugMode) {
+      debugPrint('ROLE SELECTION ONBOARDING RAW RESPONSE: ${response.data}');
+    }
+    return _envelope(response.data, _onboardingFromData);
   }
 
   @override
@@ -111,6 +123,26 @@ class DioAuthRepository implements AuthRepository {
   Map<String, dynamic> _map(Object? value) {
     if (value is Map<String, dynamic>) return value;
     throw const FormatException('The server response is invalid.');
+  }
+
+  List<Object?> _list(Object? value) => value is List ? value : const [];
+
+  AccountOnboarding _onboardingFromData(Map<String, dynamic> data) {
+    final defaultRole = accountRoleFromApi(data['default_role']);
+    return AccountOnboarding(
+      roles: _list(data['roles'])
+          .map(
+            (item) => item is Map<String, dynamic>
+                ? accountRoleFromApi(item['role'])
+                : accountRoleFromApi(item),
+          )
+          .where((role) => role != AccountRole.unknown)
+          .toList(growable: false),
+      defaultRole: defaultRole == AccountRole.unknown ? null : defaultRole,
+      status: accountOnboardingStatusFromApi(data['onboarding_status']),
+      completed: data['onboarding_completed'] == true,
+      nextStep: data['next_step'] is String ? data['next_step'] as String : '',
+    );
   }
 
   String _string(Map<String, dynamic> json, String key) {

@@ -9,6 +9,7 @@ abstract interface class AuthRepository {
   Future<AuthTokens> refresh(String refreshToken);
   Future<AuthUser> getMe();
   Future<AccountOnboarding> getOnboarding();
+  Future<AccountOnboarding> selectGymOwnerRole();
   Future<void> saveTokens(AuthTokens tokens);
   Future<void> clearTokens();
   Future<String?> readRefreshToken();
