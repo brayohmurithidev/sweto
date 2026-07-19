@@ -73,6 +73,8 @@ class Gym(
         ),
     )
 
+
+
     name: Mapped[str] = mapped_column(
         String(180),
         nullable=False,
@@ -933,3 +935,23 @@ class GymVerificationReview(
             name=("ck_gym_verification_reviews_rejection_reason_required"),
         ),
     )
+
+
+class GymPhoto(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """Persisted business-media photo for a gym."""
+
+    __tablename__ = "gym_photos"
+    __table_args__ = (
+        Index("ix_gym_photos_gym_display_order", "gym_id", "display_order"),
+        UniqueConstraint("storage_key", name="uq_gym_photos_storage_key"),
+    )
+
+    gym_id: Mapped[UUID] = mapped_column(
+        ForeignKey("gyms.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    storage_key: Mapped[str] = mapped_column(String(500), nullable=False)
+    original_filename: Mapped[str] = mapped_column(String(200), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    display_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_cover: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

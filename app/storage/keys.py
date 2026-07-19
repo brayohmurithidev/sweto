@@ -8,6 +8,17 @@ ALLOWED_EXTENSION_BY_MIME_TYPE = {
     "image/png": ".png",
 }
 
+ALLOWED_GYM_PHOTO_EXTENSION_BY_MIME_TYPE = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+}
+
+
+def build_gym_photo_key(*, gym_id: UUID, upload_id: UUID, mime_type: str) -> str:
+    extension = ALLOWED_GYM_PHOTO_EXTENSION_BY_MIME_TYPE[mime_type]
+    return f"gyms/{gym_id}/photos/{upload_id}{extension}"
+
 
 def build_gym_verification_key(
     *,

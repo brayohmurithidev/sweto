@@ -6,6 +6,7 @@ from app.modules.gyms.models import (
     Gym,
     GymAmenity,
     GymOperatingHours,
+    GymPhoto,
     GymStaff,
     GymVerificationDocument,
     GymVerificationReview,
@@ -14,7 +15,7 @@ from app.modules.profiles.models import (
     UserAccountRole,
     UserProfile,
 )
-from app.storage.models import StorageUpload
+from app.storage.models import GymPhotoUpload, StorageUpload
 
 __all__ = [
     "Amenity",
@@ -22,6 +23,7 @@ __all__ = [
     "Gym",
     "GymAmenity",
     "GymOperatingHours",
+    "GymPhoto",
     "GymStaff",
     "GymVerificationDocument",
     "GymVerificationReview",
@@ -31,4 +33,5 @@ __all__ = [
     "UserAccountRole",
     "UserProfile",
     "StorageUpload",
+    "GymPhotoUpload",
 ]

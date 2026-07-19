@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from pathlib import PurePosixPath
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,7 +9,10 @@ from app.modules.auth.enums import AuthEventOutcome, AuthEventType, UserRole
 from app.modules.auth.models import User
 from app.modules.auth.phone import normalize_phone_number
 from app.modules.gyms.constants import (
+    ALLOWED_GYM_PHOTO_MIME_TYPES,
     ALLOWED_GYM_VERIFICATION_MIME_TYPES,
+    MAX_GYM_PHOTO_FILE_SIZE_BYTES,
+    MAX_GYM_PHOTOS,
     MAX_GYM_VERIFICATION_FILE_SIZE_BYTES,
     REQUIRED_GYM_VERIFICATION_DOCUMENT_TYPES,
 )
@@ -26,6 +30,8 @@ from app.modules.gyms.exceptions import (
     GymAccessDeniedError,
     GymAlreadyExistsError,
     GymNotFoundError,
+    GymPhotoLimitReachedError,
+    GymPhotoUploadInvalidError,
     GymSlugConflictError,
     GymVerificationAccessDeniedError,
     GymVerificationAlreadyApprovedError,
@@ -43,13 +49,16 @@ from app.modules.gyms.models import (
     GymMembershipPlan,
     GymMembershipPlanBenefit,
     GymOperatingHours,
+    GymPhoto,
     GymStaff,
     GymVerificationDocument,
     GymVerificationReview,
 )
+from app.modules.gyms.photo_upload import GymPhotoUploadPurpose
 from app.modules.gyms.repository import (
     AmenityRepository,
     GymOperatingHoursRepository,
+    GymPhotoRepository,
     GymPricingRepository,
     GymRepository,
     GymStaffRepository,
@@ -67,6 +76,13 @@ from app.modules.gyms.schemas import (
     GymMembershipPlanData,
     GymOnboardingData,
     GymOperatingHoursData,
+    GymPhotoData,
+    GymPhotoDeleteData,
+    GymPhotoListData,
+    GymPhotoResponse,
+    GymPhotoUploadCompletionData,
+    GymPhotoUploadData,
+    GymPhotoUploadRequest,
     GymPricingData,
     GymVerificationData,
     GymVerificationDocumentData,
@@ -79,6 +95,8 @@ from app.modules.gyms.schemas import (
     GymVerificationUploadRequest,
     UpdateGymAmenitiesData,
     UpdateGymAmenitiesRequest,
+    UpdateGymBasicInformationData,
+    UpdateGymBasicInformationRequest,
     UpdateGymBusinessDetailsData,
     UpdateGymBusinessDetailsRequest,
     UpdateGymLocationData,
@@ -112,9 +130,13 @@ from app.storage.exceptions import (
     StorageUploadFailedError,
     StorageUploadNotFoundError,
 )
-from app.storage.keys import ALLOWED_EXTENSION_BY_MIME_TYPE, build_gym_verification_key
-from app.storage.models import StorageUpload
-from app.storage.repository import StorageUploadRepository
+from app.storage.keys import (
+    ALLOWED_EXTENSION_BY_MIME_TYPE,
+    build_gym_photo_key,
+    build_gym_verification_key,
+)
+from app.storage.models import GymPhotoUpload, StorageUpload
+from app.storage.repository import GymPhotoUploadRepository, StorageUploadRepository
 from app.storage.s3 import S3Storage
 
 
@@ -133,6 +155,7 @@ class GymService:
 
         self.amenity_repository = AmenityRepository(session)
         self.gym_repository = GymRepository(session)
+        self.gym_photo_repository = GymPhotoRepository(session)
         self.operating_hours_repository = GymOperatingHoursRepository(session)
         self.pricing_repository = GymPricingRepository(session)
         self.staff_repository = GymStaffRepository(session)
@@ -140,6 +163,7 @@ class GymService:
         self.role_repository = UserAccountRoleRepository(session)
         self.verification_repository = GymVerificationRepository(session)
         self.storage_upload_repository = StorageUploadRepository(session)
+        self.gym_photo_upload_repository = GymPhotoUploadRepository(session)
         self.storage = storage
         self.audit_logger = AuthAuditLogger(session)
 
@@ -352,10 +376,7 @@ class GymService:
         elif gym.verification_status == GymVerificationStatus.APPROVED:
             onboarding_step = GymOnboardingStep.COMPLETED
             next_step = cls._resolve_next_step(onboarding_step)
-        elif gym.verification_status in {
-            GymVerificationStatus.NOT_SUBMITTED,
-            GymVerificationStatus.REJECTED,
-        }:
+        elif gym.verification_status == GymVerificationStatus.REJECTED:
             onboarding_step = GymOnboardingStep.VERIFICATION
             next_step = GymOnboardingStep.VERIFICATION.value
         return GymOnboardingData(
@@ -388,6 +409,53 @@ class GymService:
         }
 
         return mapping[step]
+
+    async def update_basic_information(
+        self,
+        *,
+        user_id: UUID,
+        gym_id: UUID,
+        payload: UpdateGymBasicInformationRequest,
+    ) -> UpdateGymBasicInformationData:
+        """Update registration details without advancing onboarding."""
+
+        membership = await self.staff_repository.get_user_membership(
+            user_id=user_id,
+            gym_id=gym_id,
+        )
+        if membership is None:
+            raise GymAccessDeniedError("You do not have access to this gym.")
+        if membership.role not in {GymStaffRole.OWNER, GymStaffRole.MANAGER}:
+            raise GymAccessDeniedError("You do not have permission to update this gym.")
+
+        gym = await self.gym_repository.get_by_id_for_update(gym_id)
+        if gym is None:
+            raise GymNotFoundError("The requested gym was not found.")
+
+        if "name" in payload.model_fields_set:
+            assert payload.name is not None
+            gym.name = payload.name.strip()
+        if "phone_number" in payload.model_fields_set:
+            gym.phone_number = (
+                normalize_phone_number(
+                    payload.phone_number,
+                    default_region=self.default_phone_region,
+                )
+                if payload.phone_number is not None
+                else None
+            )
+        if "email" in payload.model_fields_set:
+            gym.email = str(payload.email) if payload.email is not None else None
+        if "description" in payload.model_fields_set:
+            gym.description = payload.description
+
+        await self.session.commit()
+        await self.session.refresh(gym)
+
+        return UpdateGymBasicInformationData(
+            gym=self._build_gym_data(gym),
+            onboarding=self._build_onboarding_data(gym),
+        )
 
     async def update_location(
         self,
@@ -473,7 +541,11 @@ class GymService:
 
         gym.legal_business_name = payload.legal_business_name.strip()
         gym.business_type = payload.business_type
-        gym.registration_number = payload.registration_number.strip().upper()
+        gym.registration_number = (
+            payload.registration_number.strip().upper()
+            if payload.registration_number is not None
+            else None
+        )
         gym.tax_number = (
             payload.tax_number.strip().upper()
             if payload.tax_number is not None
@@ -504,6 +576,20 @@ class GymService:
 
         amenities = await self.amenity_repository.list_active()
 
+        return [self._build_amenity_data(amenity) for amenity in amenities]
+
+    async def list_gym_amenities(
+        self, *, user_id: UUID, gym_id: UUID
+    ) -> list[AmenityData]:
+        membership = await self.staff_repository.get_user_membership(
+            user_id=user_id, gym_id=gym_id
+        )
+        if membership is None:
+            raise GymAccessDeniedError("You do not have access to this gym.")
+        gym = await self.gym_repository.get_by_id(gym_id)
+        if gym is None:
+            raise GymNotFoundError("The requested gym was not found.")
+        amenities = await self.amenity_repository.list_for_gym(gym_id)
         return [self._build_amenity_data(amenity) for amenity in amenities]
 
     async def update_amenities(
@@ -954,6 +1040,239 @@ class GymService:
             required_headers={"Content-Type": payload.mime_type},
             expires_at=presigned.expires_at,
             storage_key=key,
+        )
+
+    async def initiate_gym_photo_upload(
+        self,
+        *,
+        user_id: UUID,
+        gym_id: UUID,
+        payload: GymPhotoUploadRequest,
+    ) -> GymPhotoUploadData:
+        membership = await self.staff_repository.get_user_membership(
+            user_id=user_id, gym_id=gym_id
+        )
+        if membership is None or membership.role not in {
+            GymStaffRole.OWNER,
+            GymStaffRole.MANAGER,
+        }:
+            raise GymAccessDeniedError("You do not have permission to update this gym.")
+        gym = await self.gym_repository.get_by_id_for_update(gym_id)
+        if gym is None:
+            raise GymNotFoundError("The requested gym was not found.")
+        filename = PurePosixPath(payload.filename.replace("\\", "/")).name
+        if not filename or filename in {".", ".."}:
+            raise GymPhotoUploadInvalidError("The photo filename is invalid.")
+        if payload.mime_type not in ALLOWED_GYM_PHOTO_MIME_TYPES:
+            raise GymPhotoUploadInvalidError("The photo type is not supported.")
+        if payload.file_size > MAX_GYM_PHOTO_FILE_SIZE_BYTES:
+            raise GymPhotoUploadInvalidError("The photo is too large.")
+        completed = await self.gym_photo_repository.count_for_gym(gym_id)
+        pending = await self.gym_photo_upload_repository.count_active_pending(
+            gym_id, datetime.now(UTC)
+        )
+        if completed + pending >= MAX_GYM_PHOTOS:
+            raise GymPhotoLimitReachedError("The gym photo limit has been reached.")
+        storage = self._require_storage()
+        upload_id = uuid4()
+        key = build_gym_photo_key(
+            gym_id=gym_id, upload_id=upload_id, mime_type=payload.mime_type
+        )
+        presigned = await storage.create_upload_url(
+            key=key, mime_type=payload.mime_type
+        )
+        upload = GymPhotoUpload(
+            id=upload_id,
+            gym_id=gym_id,
+            owner_user_id=user_id,
+            purpose=GymPhotoUploadPurpose.GYM_PHOTO,
+            storage_key=key,
+            original_filename=filename,
+            declared_mime_type=payload.mime_type,
+            declared_size_bytes=payload.file_size,
+            status=UploadStatus.PENDING,
+            expires_at=presigned.expires_at,
+        )
+        self.gym_photo_upload_repository.add(upload)
+        await self.session.commit()
+        return GymPhotoUploadData(
+            upload_id=upload_id,
+            upload_url=presigned.url,
+            storage_key=key,
+            expires_at=presigned.expires_at,
+        )
+
+    async def complete_gym_photo_upload(
+        self,
+        *,
+        user_id: UUID,
+        gym_id: UUID,
+        upload_id: UUID,
+    ) -> GymPhotoUploadCompletionData:
+        membership = await self.staff_repository.get_user_membership(
+            user_id=user_id, gym_id=gym_id
+        )
+        if membership is None or membership.role not in {
+            GymStaffRole.OWNER,
+            GymStaffRole.MANAGER,
+        }:
+            raise GymAccessDeniedError("You do not have permission to update this gym.")
+        gym = await self.gym_repository.get_by_id_for_update(gym_id)
+        if gym is None:
+            raise GymNotFoundError("The requested gym was not found.")
+        upload = await self.gym_photo_upload_repository.get_for_update(upload_id)
+        if upload is None or upload.gym_id != gym_id:
+            raise StorageUploadNotFoundError("The upload intent was not found.")
+        if upload.purpose != GymPhotoUploadPurpose.GYM_PHOTO:
+            raise StorageUploadNotFoundError("The upload intent was not found.")
+        if upload.status == UploadStatus.COMPLETED:
+            existing = await self.gym_photo_repository.get_by_storage_key(
+                upload.storage_key
+            )
+            if existing is None:
+                raise StorageUploadAlreadyCompletedError(
+                    "The upload has already been completed."
+                )
+            return GymPhotoUploadCompletionData(
+                photo=self._build_gym_photo_data(existing),
+                upload_id=upload.id,
+                status=upload.status.value,
+                completed_at=upload.completed_at,
+            )
+        if upload.status != UploadStatus.PENDING:
+            raise StorageUploadFailedError("This upload can no longer be completed.")
+        if upload.expires_at < datetime.now(UTC):
+            upload.status = UploadStatus.EXPIRED
+            await self.session.commit()
+            raise StorageUploadExpiredError("This upload intent has expired.")
+
+        metadata = await self._require_storage().head_object(key=upload.storage_key)
+        actual_type = metadata.content_type.split(";", 1)[0].strip().lower()
+        if metadata.content_length != upload.declared_size_bytes:
+            raise StorageUploadFailedError("The uploaded object size does not match.")
+        if not actual_type or actual_type != upload.declared_mime_type.lower():
+            raise StorageUploadFailedError("The uploaded object type does not match.")
+        if metadata.content_length <= 0:
+            raise StorageUploadFailedError("The uploaded object metadata is invalid.")
+
+        if await self.gym_photo_repository.count_for_gym(gym_id) >= MAX_GYM_PHOTOS:
+            raise GymPhotoLimitReachedError("The gym photo limit has been reached.")
+        order = await self.gym_photo_repository.next_display_order(gym_id)
+        is_cover = order == 0
+        photo = GymPhoto(
+            gym_id=gym_id,
+            storage_key=upload.storage_key,
+            original_filename=upload.original_filename,
+            mime_type=upload.declared_mime_type,
+            file_size=upload.declared_size_bytes,
+            display_order=order,
+            is_cover=is_cover,
+        )
+        self.gym_photo_repository.add(photo)
+        if is_cover:
+            gym.cover_photo_url = upload.storage_key
+        upload.status = UploadStatus.COMPLETED
+        upload.completed_at = datetime.now(UTC)
+        await self.session.commit()
+        await self.session.refresh(photo)
+        return GymPhotoUploadCompletionData(
+            photo=self._build_gym_photo_data(photo),
+            upload_id=upload.id,
+            status=upload.status.value,
+            completed_at=upload.completed_at,
+        )
+
+    async def list_gym_photos(
+        self, *, user_id: UUID, gym_id: UUID
+    ) -> GymPhotoListData:
+        membership = await self.staff_repository.get_user_membership(
+            user_id=user_id, gym_id=gym_id
+        )
+        if membership is None or membership.role not in {
+            GymStaffRole.OWNER,
+            GymStaffRole.MANAGER,
+        }:
+            raise GymAccessDeniedError("You do not have permission to view this gym.")
+        gym = await self.gym_repository.get_by_id(gym_id)
+        if gym is None:
+            raise GymNotFoundError("The requested gym was not found.")
+        storage = self._require_storage()
+        photos = await self.gym_photo_repository.list_for_gym(gym_id)
+        responses: list[GymPhotoResponse] = []
+        for photo in photos:
+            signed = await storage.create_download_url(key=photo.storage_key)
+            responses.append(
+                GymPhotoResponse(
+                    id=photo.id,
+                    gym_id=photo.gym_id,
+                    url=signed.url,
+                    original_filename=photo.original_filename,
+                    mime_type=photo.mime_type,
+                    file_size=photo.file_size,
+                    display_order=photo.display_order,
+                    is_cover=photo.is_cover,
+                    created_at=photo.created_at,
+                )
+            )
+        return GymPhotoListData(photos=responses)
+
+    async def delete_gym_photo(
+        self, *, user_id: UUID, gym_id: UUID, photo_id: UUID
+    ) -> GymPhotoDeleteData:
+        membership = await self.staff_repository.get_user_membership(
+            user_id=user_id, gym_id=gym_id
+        )
+        if membership is None or membership.role not in {
+            GymStaffRole.OWNER,
+            GymStaffRole.MANAGER,
+        }:
+            raise GymAccessDeniedError("You do not have permission to update this gym.")
+        gym = await self.gym_repository.get_by_id_for_update(gym_id)
+        if gym is None:
+            raise GymNotFoundError("The requested gym was not found.")
+        photo = await self.gym_photo_repository.get_for_update(photo_id)
+        if photo is None or photo.gym_id != gym_id:
+            raise GymNotFoundError("The requested gym photo was not found.")
+
+        try:
+            await self._require_storage().delete_object(key=photo.storage_key)
+        except StorageObjectNotFoundError:
+            # Deletion is idempotent for an object that has already disappeared.
+            pass
+
+        was_cover = photo.is_cover
+        await self.gym_photo_repository.delete(photo)
+        replacement_id: UUID | None = None
+        if was_cover:
+            replacement = await self.gym_photo_repository.get_next_cover(
+                gym_id, excluding_id=photo_id
+            )
+            if replacement is None:
+                gym.cover_photo_url = None
+            else:
+                replacement.is_cover = True
+                gym.cover_photo_url = replacement.storage_key
+                replacement_id = replacement.id
+        await self.session.commit()
+        return GymPhotoDeleteData(
+            deleted_photo_id=photo_id,
+            cover_photo_id=replacement_id,
+            cover_photo_url=gym.cover_photo_url,
+        )
+
+    @staticmethod
+    def _build_gym_photo_data(photo: GymPhoto) -> GymPhotoData:
+        return GymPhotoData(
+            id=photo.id,
+            gym_id=photo.gym_id,
+            storage_key=photo.storage_key,
+            original_filename=photo.original_filename,
+            mime_type=photo.mime_type,
+            file_size=photo.file_size,
+            display_order=photo.display_order,
+            is_cover=photo.is_cover,
+            created_at=photo.created_at,
+            updated_at=photo.updated_at,
         )
 
     async def complete_verification_upload(

@@ -15,6 +15,11 @@ from app.modules.gyms.schemas import (
     GymData,
     GymOnboardingData,
     GymOperatingHoursData,
+    GymPhotoDeleteData,
+    GymPhotoListData,
+    GymPhotoUploadCompletionData,
+    GymPhotoUploadData,
+    GymPhotoUploadRequest,
     GymPricingData,
     GymVerificationData,
     GymVerificationDocumentData,
@@ -23,6 +28,8 @@ from app.modules.gyms.schemas import (
     GymVerificationUploadRequest,
     UpdateGymAmenitiesData,
     UpdateGymAmenitiesRequest,
+    UpdateGymBasicInformationData,
+    UpdateGymBasicInformationRequest,
     UpdateGymBusinessDetailsData,
     UpdateGymBusinessDetailsRequest,
     UpdateGymLocationData,
@@ -51,6 +58,47 @@ ApplicationSettings = Annotated[
     Settings,
     Depends(get_settings),
 ]
+
+
+@router.get(
+    "/{gym_id}/photos",
+    response_model=APIResponse[GymPhotoListData],
+)
+async def list_gym_photos(
+    gym_id: UUID,
+    current_user: CurrentUser,
+    session: DatabaseSession,
+    settings: ApplicationSettings,
+) -> APIResponse[GymPhotoListData]:
+    service = GymService(
+        session=session,
+        default_phone_region=settings.default_phone_region,
+        storage=S3Storage(settings),
+    )
+    data = await service.list_gym_photos(user_id=current_user.id, gym_id=gym_id)
+    return APIResponse(data=data)
+
+
+@router.delete(
+    "/{gym_id}/photos/{photo_id}",
+    response_model=APIResponse[GymPhotoDeleteData],
+)
+async def delete_gym_photo(
+    gym_id: UUID,
+    photo_id: UUID,
+    current_user: CurrentUser,
+    session: DatabaseSession,
+    settings: ApplicationSettings,
+) -> APIResponse[GymPhotoDeleteData]:
+    service = GymService(
+        session=session,
+        default_phone_region=settings.default_phone_region,
+        storage=S3Storage(settings),
+    )
+    data = await service.delete_gym_photo(
+        user_id=current_user.id, gym_id=gym_id, photo_id=photo_id
+    )
+    return APIResponse(data=data)
 
 
 @router.post(
@@ -148,6 +196,29 @@ async def get_gym_onboarding(
 
 
 @router.patch(
+    "/{gym_id}/basic-information",
+    response_model=APIResponse[UpdateGymBasicInformationData],
+)
+async def update_gym_basic_information(
+    gym_id: UUID,
+    payload: UpdateGymBasicInformationRequest,
+    current_user: CurrentUser,
+    session: DatabaseSession,
+    settings: ApplicationSettings,
+) -> APIResponse[UpdateGymBasicInformationData]:
+    service = GymService(
+        session=session,
+        default_phone_region=settings.default_phone_region,
+    )
+    data = await service.update_basic_information(
+        user_id=current_user.id,
+        gym_id=gym_id,
+        payload=payload,
+    )
+    return APIResponse(data=data)
+
+
+@router.patch(
     "/{gym_id}/location",
     response_model=APIResponse[UpdateGymLocationData],
 )
@@ -226,6 +297,25 @@ async def update_gym_amenities(
     )
 
     return APIResponse(data=data)
+
+
+@router.get(
+    "/{gym_id}/amenities",
+    response_model=APIResponse[list[AmenityData]],
+)
+async def get_gym_amenities(
+    gym_id: UUID,
+    current_user: CurrentUser,
+    session: DatabaseSession,
+    settings: ApplicationSettings,
+) -> APIResponse[list[AmenityData]]:
+    service = GymService(
+        session=session,
+        default_phone_region=settings.default_phone_region,
+    )
+    return APIResponse(
+        data=await service.list_gym_amenities(user_id=current_user.id, gym_id=gym_id)
+    )
 
 
 @router.get(
@@ -329,6 +419,55 @@ async def update_gym_pricing(
         payload=payload,
     )
 
+    return APIResponse(data=data)
+
+
+@router.post(
+    "/{gym_id}/photos/upload/{upload_id}/complete",
+    response_model=APIResponse[GymPhotoUploadCompletionData],
+)
+async def complete_gym_photo_upload(
+    gym_id: UUID,
+    upload_id: UUID,
+    current_user: CurrentUser,
+    session: DatabaseSession,
+    settings: ApplicationSettings,
+) -> APIResponse[GymPhotoUploadCompletionData]:
+    service = GymService(
+        session=session,
+        default_phone_region=settings.default_phone_region,
+        storage=S3Storage(settings),
+    )
+    data = await service.complete_gym_photo_upload(
+        user_id=current_user.id,
+        gym_id=gym_id,
+        upload_id=upload_id,
+    )
+    return APIResponse(data=data)
+
+
+@router.post(
+    "/{gym_id}/photos/upload",
+    response_model=APIResponse[GymPhotoUploadData],
+    status_code=status.HTTP_201_CREATED,
+)
+async def initiate_gym_photo_upload(
+    gym_id: UUID,
+    payload: GymPhotoUploadRequest,
+    current_user: CurrentUser,
+    session: DatabaseSession,
+    settings: ApplicationSettings,
+) -> APIResponse[GymPhotoUploadData]:
+    service = GymService(
+        session=session,
+        default_phone_region=settings.default_phone_region,
+        storage=S3Storage(settings),
+    )
+    data = await service.initiate_gym_photo_upload(
+        user_id=current_user.id,
+        gym_id=gym_id,
+        payload=payload,
+    )
     return APIResponse(data=data)
 
 

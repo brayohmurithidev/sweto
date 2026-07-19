@@ -39,6 +39,25 @@ class CreateGymRequest(BaseModel):
     )
 
 
+class UpdateGymBasicInformationRequest(BaseModel):
+    """Partial update for the gym's initial registration details."""
+
+    name: str | None = Field(default=None, min_length=2, max_length=180)
+    phone_number: str | None = Field(default=None, min_length=7, max_length=30)
+    email: EmailStr | None = None
+    description: str | None = Field(default=None, max_length=3000)
+
+    @model_validator(mode="after")
+    def require_field(self) -> "UpdateGymBasicInformationRequest":
+        if not self.model_fields_set:
+            raise ValueError("At least one basic-information field is required.")
+        if self.name is not None and not self.name.strip():
+            raise ValueError("Gym name cannot be blank.")
+        if self.description is not None:
+            self.description = self.description.strip() or None
+        return self
+
+
 class GymData(BaseModel):
     """Gym information returned to the mobile application."""
 
@@ -88,7 +107,62 @@ class GymOnboardingData(BaseModel):
     onboarding_completed: bool
     next_step: str | None
     limited_access: bool
-    verification_rejection_reason: str | None
+    verification_rejection_reason: str | None = None
+
+
+class GymPhotoData(BaseModel):
+    id: UUID
+    gym_id: UUID
+    storage_key: str
+    original_filename: str
+    mime_type: str
+    file_size: int
+    display_order: int
+    is_cover: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class GymPhotoResponse(BaseModel):
+    id: UUID
+    gym_id: UUID
+    url: str
+    original_filename: str
+    mime_type: str
+    file_size: int
+    display_order: int
+    is_cover: bool
+    created_at: datetime
+
+
+class GymPhotoListData(BaseModel):
+    photos: list[GymPhotoResponse]
+
+
+class GymPhotoDeleteData(BaseModel):
+    deleted_photo_id: UUID
+    cover_photo_id: UUID | None
+    cover_photo_url: str | None
+
+
+class GymPhotoUploadRequest(BaseModel):
+    filename: str = Field(min_length=1, max_length=200)
+    mime_type: str = Field(min_length=1, max_length=100)
+    file_size: int = Field(gt=0)
+
+
+class GymPhotoUploadData(BaseModel):
+    upload_id: UUID
+    upload_url: str
+    storage_key: str
+    expires_at: datetime
+
+
+class GymPhotoUploadCompletionData(BaseModel):
+    photo: GymPhotoData
+    upload_id: UUID
+    status: str
+    completed_at: datetime | None
 
 
 class CreateGymData(BaseModel):
@@ -146,6 +220,13 @@ class UpdateGymLocationData(BaseModel):
     onboarding: GymOnboardingData
 
 
+class UpdateGymBasicInformationData(BaseModel):
+    """Result returned after saving basic gym information."""
+
+    gym: GymData
+    onboarding: GymOnboardingData
+
+
 class UpdateGymBusinessDetailsRequest(BaseModel):
     """Business details collected during gym onboarding."""
 
@@ -157,7 +238,8 @@ class UpdateGymBusinessDetailsRequest(BaseModel):
 
     business_type: GymBusinessType
 
-    registration_number: str = Field(
+    registration_number: str | None = Field(
+        default=None,
         min_length=2,
         max_length=100,
         examples=["PVT-ABC123"],
@@ -569,7 +651,7 @@ class GymVerificationDocumentData(BaseModel):
     file_size_bytes: int
     etag: str | None
     is_active: bool
-    uploaded_by_user_id: UUID
+    uploaded_by_user_id: UUID | None
     created_at: datetime
     updated_at: datetime
 
@@ -670,7 +752,7 @@ class GymVerificationReviewData(BaseModel):
     decision: GymVerificationDecision
     notes: str | None
     rejection_reason: str | None
-    reviewed_by_user_id: UUID
+    reviewed_by_user_id: UUID | None
     reviewed_at: datetime
 
 

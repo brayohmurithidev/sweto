@@ -20,6 +20,7 @@ from app.modules.gyms.models import (
     GymMembershipPlan,
     GymMembershipPlanBenefit,
     GymOperatingHours,
+    GymPhoto,
     GymStaff,
     GymVerificationDocument,
     GymVerificationReview,
@@ -72,6 +73,74 @@ class GymRepository:
         result = await self.session.execute(statement)
 
         return result.scalar_one_or_none()
+
+
+class GymPhotoRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    def add(self, photo: GymPhoto) -> None:
+        self.session.add(photo)
+
+    async def get_by_id(self, photo_id: UUID) -> GymPhoto | None:
+        result = await self.session.execute(
+            select(GymPhoto).where(GymPhoto.id == photo_id)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_by_storage_key(self, storage_key: str) -> GymPhoto | None:
+        result = await self.session.execute(
+            select(GymPhoto).where(GymPhoto.storage_key == storage_key)
+        )
+        return result.scalar_one_or_none()
+
+    async def list_for_gym(self, gym_id: UUID) -> list[GymPhoto]:
+        result = await self.session.execute(
+            select(GymPhoto)
+            .where(GymPhoto.gym_id == gym_id)
+            .order_by(GymPhoto.display_order, GymPhoto.created_at, GymPhoto.id)
+        )
+        return list(result.scalars())
+
+    async def count_for_gym(self, gym_id: UUID) -> int:
+        result = await self.session.execute(
+            select(func.count()).select_from(GymPhoto).where(GymPhoto.gym_id == gym_id)
+        )
+        return int(result.scalar_one())
+
+    async def get_cover(self, gym_id: UUID) -> GymPhoto | None:
+        result = await self.session.execute(
+            select(GymPhoto).where(
+                GymPhoto.gym_id == gym_id, GymPhoto.is_cover.is_(True)
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def next_display_order(self, gym_id: UUID) -> int:
+        result = await self.session.execute(
+            select(func.coalesce(func.max(GymPhoto.display_order), -1) + 1).where(
+                GymPhoto.gym_id == gym_id
+            )
+        )
+        return int(result.scalar_one())
+
+    async def get_for_update(self, photo_id: UUID) -> GymPhoto | None:
+        result = await self.session.execute(
+            select(GymPhoto).where(GymPhoto.id == photo_id).with_for_update()
+        )
+        return result.scalar_one_or_none()
+
+    async def get_next_cover(self, gym_id: UUID, excluding_id: UUID) -> GymPhoto | None:
+        result = await self.session.execute(
+            select(GymPhoto)
+            .where(GymPhoto.gym_id == gym_id, GymPhoto.id != excluding_id)
+            .order_by(GymPhoto.display_order, GymPhoto.created_at, GymPhoto.id)
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def delete(self, photo: GymPhoto) -> None:
+        await self.session.delete(photo)
 
 
 class GymStaffRepository:
@@ -156,6 +225,16 @@ class AmenityRepository:
 
         result = await self.session.execute(statement)
 
+        return result.scalars().all()
+
+    async def list_for_gym(self, gym_id: UUID) -> Sequence[Amenity]:
+        statement = (
+            select(Amenity)
+            .join(GymAmenity, GymAmenity.amenity_id == Amenity.id)
+            .where(GymAmenity.gym_id == gym_id)
+            .order_by(Amenity.display_order.asc(), Amenity.name.asc())
+        )
+        result = await self.session.execute(statement)
         return result.scalars().all()
 
     async def replace_gym_amenities(

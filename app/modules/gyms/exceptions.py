@@ -2,6 +2,14 @@ class GymError(Exception):
     """Base exception for gym-related failures."""
 
 
+class GymPhotoUploadInvalidError(GymError):
+    """Raised when gym-photo upload metadata is invalid."""
+
+
+class GymPhotoLimitReachedError(GymError):
+    """Raised when a gym has reached its active photo limit."""
+
+
 class GymNotFoundError(GymError):
     """Raised when a requested gym cannot be found."""
 

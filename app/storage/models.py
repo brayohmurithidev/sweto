@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.database.types import string_enum
 from app.modules.gyms.enums import GymVerificationDocumentType
+from app.modules.gyms.photo_upload import GymPhotoUploadPurpose
 from app.storage.enums import UploadPurpose, UploadStatus
 
 
@@ -65,3 +66,39 @@ class StorageUpload(Base, UUIDPrimaryKeyMixin, TimestampMixin):
     completed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class GymPhotoUpload(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Pending direct-upload intent for a gym photo."""
+
+    __tablename__ = "gym_photo_uploads"
+    __table_args__ = (
+        CheckConstraint(
+            "declared_size_bytes > 0", name="gym_photo_upload_size_positive"
+        ),
+    )
+
+    gym_id: Mapped[UUID] = mapped_column(
+        ForeignKey("gyms.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    owner_user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    purpose: Mapped[GymPhotoUploadPurpose] = mapped_column(
+        string_enum(GymPhotoUploadPurpose, name="gym_photo_upload_purpose"),
+        nullable=False,
+    )
+    storage_key: Mapped[str] = mapped_column(String(500), nullable=False, unique=True)
+    original_filename: Mapped[str] = mapped_column(String(200), nullable=False)
+    declared_mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    declared_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[UploadStatus] = mapped_column(
+        string_enum(UploadStatus, name="upload_status"),
+        nullable=False,
+        default=UploadStatus.PENDING,
+        server_default=UploadStatus.PENDING.value,
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
