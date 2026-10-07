@@ -1653,12 +1653,15 @@ class GymService:
             gym.onboarding_step = GymOnboardingStep.COMPLETED
             gym.onboarding_completed = True
             gym.verification_rejection_reason = None
+            # Approval is what makes a gym discoverable to members.
+            gym.is_listed = True
             event_type = AuthEventType.GYM_VERIFICATION_APPROVED
         else:
             gym.verification_status = GymVerificationStatus.REJECTED
             gym.status = GymStatus.DRAFT
             gym.onboarding_step = GymOnboardingStep.VERIFICATION
             gym.onboarding_completed = False
+            gym.is_listed = False
             gym.verification_rejection_reason = payload.rejection_reason
             event_type = AuthEventType.GYM_VERIFICATION_REJECTED
 
