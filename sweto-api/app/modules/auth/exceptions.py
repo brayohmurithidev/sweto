@@ -14,6 +14,13 @@ class OTPResendCooldownError(AuthenticationError):
         super().__init__(f"Request another code in {retry_after_seconds} seconds.")
 
 
+class OTPDeliveryFailedError(AuthenticationError):
+    """Raised when the verification code could not be sent by SMS."""
+
+    def __init__(self) -> None:
+        super().__init__("We couldn't send your verification code. Please try again.")
+
+
 class OTPChallengeNotFoundError(AuthenticationError):
     """Raised when an OTP challenge does not exist."""
 

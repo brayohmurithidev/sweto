@@ -27,6 +27,7 @@ from app.modules.auth.exceptions import (
     OTPChallengeConsumedError,
     OTPChallengeExpiredError,
     OTPChallengeNotFoundError,
+    OTPDeliveryFailedError,
     OTPResendCooldownError,
     PasswordChangeRequiredError,
     PasswordLoginNotAvailableError,
@@ -42,6 +43,9 @@ from app.modules.gyms.exceptions import (
     GymAccessDeniedError,
     GymAlreadyExistsError,
     GymNotFoundError,
+    GymPhotoLimitReachedError,
+    GymPhotoUploadInvalidError,
+    GymProfileIncompleteError,
     GymSlugConflictError,
     GymVerificationAccessDeniedError,
     GymVerificationAlreadyApprovedError,
@@ -163,6 +167,28 @@ async def otp_resend_cooldown_handler(
         },
         headers={
             "Retry-After": str(retry_after_seconds),
+        },
+    )
+
+
+async def otp_delivery_failed_handler(
+    _: Request,
+    exception: Exception,
+) -> JSONResponse:
+    """Return a retryable error when the SMS provider could not send the code."""
+
+    if not isinstance(exception, OTPDeliveryFailedError):
+        raise exception
+
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={
+            "success": False,
+            "error": {
+                "code": "OTP_DELIVERY_FAILED",
+                "message": str(exception),
+                "details": {},
+            },
         },
     )
 
@@ -512,6 +538,7 @@ async def gym_verification_error_handler(
         ),
         GymVerificationDocumentInvalidError: (422, "GYM_VERIFICATION_DOCUMENT_INVALID"),
         GymVerificationRequirementsError: (422, "GYM_VERIFICATION_DOCUMENTS_MISSING"),
+        GymProfileIncompleteError: (422, "GYM_PROFILE_INCOMPLETE"),
         GymVerificationAlreadyPendingError: (409, "GYM_VERIFICATION_ALREADY_PENDING"),
         GymVerificationAlreadyApprovedError: (409, "GYM_VERIFICATION_ALREADY_APPROVED"),
         GymVerificationReviewInProgressError: (
@@ -532,6 +559,8 @@ async def gym_verification_error_handler(
     details: dict[str, object] | None = None
     if isinstance(exception, GymVerificationRequirementsError):
         details = {"missing_document_types": exception.missing_document_types}
+    elif isinstance(exception, GymProfileIncompleteError):
+        details = {"next_step": exception.next_step}
     return error_response(
         status_code=status_code, code=code, message=str(exception), details=details
     )
@@ -554,6 +583,24 @@ async def storage_error_handler(_: Request, exception: Exception) -> JSONRespons
     }
     status_code, code = mappings.get(type(exception), (500, "STORAGE_ERROR"))
     return error_response(status_code=status_code, code=code, message=str(exception))
+
+
+async def gym_photo_error_handler(_: Request, exception: Exception) -> JSONResponse:
+    """Return client errors for rejected gym-photo uploads."""
+
+    if isinstance(exception, GymPhotoLimitReachedError):
+        return error_response(
+            status_code=status.HTTP_409_CONFLICT,
+            code="GYM_PHOTO_LIMIT_REACHED",
+            message=str(exception),
+        )
+    if isinstance(exception, GymPhotoUploadInvalidError):
+        return error_response(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            code="GYM_PHOTO_INVALID",
+            message=str(exception),
+        )
+    raise exception
 
 
 async def gym_already_exists_handler(

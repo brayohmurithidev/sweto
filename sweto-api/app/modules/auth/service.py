@@ -1,10 +1,12 @@
+import asyncio
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.integrations.sms.base import SMSProvider
+from app.integrations.sms.base import SMSDeliveryError, SMSProvider
 from app.modules.auth.audit import AuthAuditLogger
 from app.modules.auth.enums import (
     AuthEventOutcome,
@@ -25,6 +27,7 @@ from app.modules.auth.exceptions import (
     OTPChallengeConsumedError,
     OTPChallengeExpiredError,
     OTPChallengeNotFoundError,
+    OTPDeliveryFailedError,
     OTPResendCooldownError,
     PasswordLoginNotAvailableError,
     PasswordReuseNotAllowedError,
@@ -76,6 +79,8 @@ from app.modules.auth.tokens import (
     hash_refresh_token,
 )
 from app.rate_limit.base import RateLimiter
+
+logger = logging.getLogger(__name__)
 
 _DUMMY_PASSWORD_HASH = hash_password("invalid-password-login-placeholder")
 
@@ -385,6 +390,7 @@ class AuthenticationService:
         phone_number = normalize_phone_number(
             raw_phone_number,
             default_region=self.settings.default_phone_region,
+            require_mobile=True,
         )
 
         await self._enforce_otp_request_limits(
@@ -477,11 +483,21 @@ class AuthenticationService:
         await self.session.commit()
         await self.session.refresh(challenge)
 
-        await self.sms_provider.send_otp(
-            phone_number=phone_number,
-            otp_code=otp_code,
-            expires_in_seconds=self.settings.otp_expiry_seconds,
-        )
+        try:
+            async with asyncio.timeout(self.settings.sms_send_timeout_seconds):
+                await self.sms_provider.send_otp(
+                    phone_number=phone_number,
+                    otp_code=otp_code,
+                    expires_in_seconds=self.settings.otp_expiry_seconds,
+                )
+        except Exception as exc:
+            await self._record_otp_delivery_failure(
+                challenge=challenge,
+                error=exc,
+                requested_ip=requested_ip,
+                user_agent=user_agent,
+            )
+            raise OTPDeliveryFailedError() from exc
 
         return RequestOTPData(
             challenge_id=str(challenge.id),
@@ -489,6 +505,49 @@ class AuthenticationService:
             expires_at=challenge.expires_at,
             resend_available_at=resend_available_at,
             expires_in_seconds=self.settings.otp_expiry_seconds,
+        )
+
+    async def _record_otp_delivery_failure(
+        self,
+        *,
+        challenge: OTPChallenge,
+        error: Exception,
+        requested_ip: str | None,
+        user_agent: str | None,
+    ) -> None:
+        """Retire an undelivered challenge so the user can request a new code.
+
+        The challenge is expired rather than left pending, which would hold
+        the user in the resend cooldown for a code that never arrived. Only
+        the failure category is recorded; the code itself is never logged.
+        """
+
+        if isinstance(error, TimeoutError):
+            reason, retryable = "timeout", True
+        elif isinstance(error, SMSDeliveryError):
+            reason, retryable = error.reason, error.retryable
+        else:
+            reason, retryable = f"unexpected_{type(error).__name__}", True
+
+        challenge.status = OTPStatus.EXPIRED
+
+        self.audit_logger.record(
+            event_type=AuthEventType.OTP_DELIVERY_FAILED,
+            outcome=AuthEventOutcome.FAILURE,
+            challenge_id=challenge.id,
+            phone_number=challenge.phone_number,
+            ip_address=requested_ip,
+            user_agent=user_agent,
+            metadata={"reason": reason, "retryable": retryable},
+        )
+
+        await self.session.commit()
+
+        logger.warning(
+            "OTP delivery failed for challenge %s (reason=%s, retryable=%s)",
+            challenge.id,
+            reason,
+            retryable,
         )
 
     async def verify_login_otp(

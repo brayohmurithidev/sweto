@@ -30,6 +30,16 @@ uv run fastapi dev app/main.py
 
 Checks: `uv run ruff check . && uv run mypy app && uv run pytest`
 
+Integration tests (real PostgreSQL) run when `SWETO_TEST_DATABASE_URL` points
+at a disposable database whose name ends in `_test`; it is migrated and
+truncated by the tests:
+
+```bash
+createdb sweto_test
+SWETO_TEST_DATABASE_URL=postgresql+asyncpg://sweto:<password>@localhost:5432/sweto_test \
+  uv run pytest
+```
+
 ### Mobile app
 
 ```bash

@@ -15,6 +15,7 @@ from app.core.exceptions import (
     gym_access_denied_handler,
     gym_already_exists_handler,
     gym_not_found_handler,
+    gym_photo_error_handler,
     gym_slug_conflict_handler,
     gym_verification_error_handler,
     invalid_access_token_handler,
@@ -27,6 +28,7 @@ from app.core.exceptions import (
     otp_challenge_consumed_handler,
     otp_challenge_expired_handler,
     otp_challenge_not_found_handler,
+    otp_delivery_failed_handler,
     otp_resend_cooldown_handler,
     password_change_required_handler,
     password_login_not_available_handler,
@@ -65,6 +67,7 @@ from app.modules.auth.exceptions import (
     OTPChallengeConsumedError,
     OTPChallengeExpiredError,
     OTPChallengeNotFoundError,
+    OTPDeliveryFailedError,
     OTPResendCooldownError,
     PasswordChangeRequiredError,
     PasswordLoginNotAvailableError,
@@ -80,6 +83,9 @@ from app.modules.gyms.exceptions import (
     GymAccessDeniedError,
     GymAlreadyExistsError,
     GymNotFoundError,
+    GymPhotoLimitReachedError,
+    GymPhotoUploadInvalidError,
+    GymProfileIncompleteError,
     GymSlugConflictError,
     GymVerificationAccessDeniedError,
     GymVerificationAlreadyApprovedError,
@@ -154,6 +160,11 @@ def create_application() -> FastAPI:
     application.add_exception_handler(
         OTPResendCooldownError,
         otp_resend_cooldown_handler,
+    )
+
+    application.add_exception_handler(
+        OTPDeliveryFailedError,
+        otp_delivery_failed_handler,
     )
 
     application.add_exception_handler(
@@ -267,6 +278,7 @@ def create_application() -> FastAPI:
         GymVerificationDocumentNotFoundError,
         GymVerificationDocumentInvalidError,
         GymVerificationRequirementsError,
+        GymProfileIncompleteError,
         GymVerificationAlreadyPendingError,
         GymVerificationAlreadyApprovedError,
         GymVerificationReviewInProgressError,
@@ -288,6 +300,8 @@ def create_application() -> FastAPI:
         gym_slug_conflict_handler,
     )
     application.add_exception_handler(StorageError, storage_error_handler)
+    for photo_exception in (GymPhotoLimitReachedError, GymPhotoUploadInvalidError):
+        application.add_exception_handler(photo_exception, gym_photo_error_handler)
 
     application.add_exception_handler(
         AmenityNotFoundError,
