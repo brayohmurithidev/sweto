@@ -1182,9 +1182,7 @@ class GymService:
             completed_at=upload.completed_at,
         )
 
-    async def list_gym_photos(
-        self, *, user_id: UUID, gym_id: UUID
-    ) -> GymPhotoListData:
+    async def list_gym_photos(self, *, user_id: UUID, gym_id: UUID) -> GymPhotoListData:
         membership = await self.staff_repository.get_user_membership(
             user_id=user_id, gym_id=gym_id
         )

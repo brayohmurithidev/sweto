@@ -73,8 +73,6 @@ class Gym(
         ),
     )
 
-
-
     name: Mapped[str] = mapped_column(
         String(180),
         nullable=False,
