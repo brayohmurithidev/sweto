@@ -372,3 +372,68 @@ async def test_pricing_rejects_invalid_amounts(
             json={"day_passes": [day_pass], "membership_plans": []},
         )
         assert response.status_code == 422, day_pass
+
+
+async def upload_photo(
+    owner: Owner, storage: FakeStorage, gym_id: str, *, mime: str = "image/jpeg"
+) -> Any:
+    intent = await owner.call(
+        "POST",
+        f"/gyms/{gym_id}/photos/upload",
+        json={"filename": "front.jpg", "mime_type": mime, "file_size": 4096},
+    )
+    if intent.status_code != 201:
+        return intent
+    data = intent.json()["data"]
+    storage.put(data["storage_key"], content_type=mime, size=4096)
+    return await owner.call(
+        "POST", f"/gyms/{gym_id}/photos/upload/{data['upload_id']}/complete"
+    )
+
+
+async def test_photos_upload_list_cover_and_delete(
+    api: IntegrationAPI, storage: FakeStorage
+) -> None:
+    owner = await sign_in_owner(api)
+    gym_id = await complete_profile(owner, storage)
+
+    first = await upload_photo(owner, storage, gym_id)
+    assert first.status_code == 200, first.json()
+    assert first.json()["data"]["photo"]["is_cover"] is True
+    second = await upload_photo(owner, storage, gym_id)
+    assert second.json()["data"]["photo"]["is_cover"] is False
+
+    listed = await owner.call("GET", f"/gyms/{gym_id}/photos")
+    assert listed.status_code == 200
+    photo_id = first.json()["data"]["photo"]["id"]
+
+    deleted = await owner.call("DELETE", f"/gyms/{gym_id}/photos/{photo_id}")
+    assert deleted.status_code == 200, deleted.json()
+    remaining = (await owner.call("GET", f"/gyms/{gym_id}/photos")).json()["data"]
+    assert len(remaining["photos"]) == 1
+
+
+async def test_photo_limit_is_a_client_error_not_a_crash(
+    api: IntegrationAPI, storage: FakeStorage
+) -> None:
+    owner = await sign_in_owner(api)
+    gym_id = await complete_profile(owner, storage)
+    for _ in range(5):
+        assert (await upload_photo(owner, storage, gym_id)).status_code == 200
+
+    sixth = await upload_photo(owner, storage, gym_id)
+
+    assert sixth.status_code == 409
+    assert sixth.json()["error"]["code"] == "GYM_PHOTO_LIMIT_REACHED"
+
+
+async def test_unsupported_photo_type_is_a_client_error(
+    api: IntegrationAPI, storage: FakeStorage
+) -> None:
+    owner = await sign_in_owner(api)
+    gym_id = await complete_profile(owner, storage)
+
+    response = await upload_photo(owner, storage, gym_id, mime="image/gif")
+
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "GYM_PHOTO_INVALID"
