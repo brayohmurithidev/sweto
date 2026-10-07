@@ -47,6 +47,7 @@ class AuthEventType(StrEnum):
 
     OTP_REQUESTED = "otp_requested"
     OTP_REQUEST_BLOCKED = "otp_request_blocked"
+    OTP_DELIVERY_FAILED = "otp_delivery_failed"
     OTP_VERIFIED = "otp_verified"
     OTP_VERIFICATION_FAILED = "otp_verification_failed"
     OTP_EXPIRED = "otp_expired"

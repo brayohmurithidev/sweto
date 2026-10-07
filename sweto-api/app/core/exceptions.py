@@ -27,6 +27,7 @@ from app.modules.auth.exceptions import (
     OTPChallengeConsumedError,
     OTPChallengeExpiredError,
     OTPChallengeNotFoundError,
+    OTPDeliveryFailedError,
     OTPResendCooldownError,
     PasswordChangeRequiredError,
     PasswordLoginNotAvailableError,
@@ -163,6 +164,28 @@ async def otp_resend_cooldown_handler(
         },
         headers={
             "Retry-After": str(retry_after_seconds),
+        },
+    )
+
+
+async def otp_delivery_failed_handler(
+    _: Request,
+    exception: Exception,
+) -> JSONResponse:
+    """Return a retryable error when the SMS provider could not send the code."""
+
+    if not isinstance(exception, OTPDeliveryFailedError):
+        raise exception
+
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={
+            "success": False,
+            "error": {
+                "code": "OTP_DELIVERY_FAILED",
+                "message": str(exception),
+                "details": {},
+            },
         },
     )
 

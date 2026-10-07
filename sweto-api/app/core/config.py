@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     default_phone_region: str = "KE"
 
     sms_provider: Literal["console"] = "console"
+    sms_send_timeout_seconds: float = Field(default=10, gt=0, le=30)
 
     jwt_secret_key: str
     jwt_algorithm: Literal["HS256"] = "HS256"
@@ -76,6 +77,20 @@ class Settings(BaseSettings):
             raise ValueError(
                 "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY "
                 "must be configured together."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_sms_provider(self) -> "Settings":
+        # The console provider writes OTP codes to the logs. It must never run
+        # where real users sign in.
+        if self.sms_provider == "console" and self.app_environment in {
+            "staging",
+            "production",
+        }:
+            raise ValueError(
+                "SMS_PROVIDER=console logs verification codes and is only "
+                "allowed in local, development and testing environments."
             )
         return self
 
