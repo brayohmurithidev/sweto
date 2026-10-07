@@ -1,0 +1,39 @@
+name: API
+
+on:
+  push:
+    branches: [main]
+    paths: ["sweto-api/**", ".github/workflows/api.yml"]
+  pull_request:
+    paths: ["sweto-api/**", ".github/workflows/api.yml"]
+
+concurrency:
+  group: api-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sweto-api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: sweto-api/uv.lock
+      - name: Install dependencies
+        run: uv sync --locked --python 3.12
+      - name: Configure test environment
+        run: cp .env.example .env
+      - name: Lint (ruff)
+        run: uv run ruff check .
+      - name: Format check (ruff)
+        run: uv run ruff format --check .
+      - name: Type check (mypy)
+        run: uv run mypy app
+      - name: Tests (pytest)
+        run: uv run pytest -q
+      - name: Migrations have a single head
+        run: test "$(uv run alembic heads | wc -l)" -eq 1

@@ -9,10 +9,11 @@ SWETO is a mobile fitness marketplace for East Africa. The MVP loop is:
 |---|---|
 | `sweto-api/` | Backend: FastAPI (Python 3.12), PostgreSQL 16, Redis, Alembic, S3 |
 | `sweto_app/` | Mobile app: Flutter (iOS and Android), Riverpod, go_router, Dio |
-| `.github/workflows/` | CI for both projects |
+| `ci-pending/` | CI workflows to move into `.github/workflows/` (see its README) |
 
 Both projects keep their full git history from before they were combined
-into this repository (see `git log -- sweto-api` and `git log -- sweto_app`).
+into this repository; their earlier commits appear in `git log` before the
+"import … with full history" merge commits.
 
 ## Getting started
 

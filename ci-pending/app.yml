@@ -1,0 +1,33 @@
+name: App
+
+on:
+  push:
+    branches: [main]
+    paths: ["sweto_app/**", ".github/workflows/app.yml"]
+  pull_request:
+    paths: ["sweto_app/**", ".github/workflows/app.yml"]
+
+concurrency:
+  group: app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sweto_app
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Flutter version
+        run: flutter --version
+      - name: Install dependencies
+        run: flutter pub get
+      - name: Analyze
+        run: flutter analyze
+      - name: Tests
+        run: flutter test
