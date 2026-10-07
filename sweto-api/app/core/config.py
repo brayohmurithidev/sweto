@@ -1,0 +1,94 @@
+from functools import lru_cache
+from typing import Literal
+
+from pydantic import Field, PostgresDsn, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    """Application configurations loaded from environment variables."""
+
+    app_name: str = "SWETO API"
+    app_version: str = "0.1.0"
+    app_environment: Literal[
+        "local", "development", "testing", "staging", "production"
+    ] = "local"
+    debug: bool = True
+
+    api_v1_prefix: str = "/api/v1"
+
+    database_url: PostgresDsn
+    database_echo: bool = False
+
+    otp_length: int = 6
+    otp_expiry_seconds: int = 300
+    otp_resend_cooldown_seconds: int = 60
+    otp_max_attempts: int = 5
+
+    otp_hash_secret: str
+    default_phone_region: str = "KE"
+
+    sms_provider: Literal["console"] = "console"
+
+    jwt_secret_key: str
+    jwt_algorithm: Literal["HS256"] = "HS256"
+    access_token_expiry_minutes: int = 30
+    refresh_token_expiry_days: int = 30
+
+    session_activity_update_interval_seconds: int = 300
+
+    redis_url: str = "redis://localhost:6379/0"
+    redis_key_prefix: str = "sweto"
+
+    otp_request_phone_limit: int = 5
+    otp_request_phone_window_seconds: int = 900
+
+    otp_request_ip_limit: int = 20
+    otp_request_ip_window_seconds: int = 3600
+
+    otp_verify_challenge_limit: int = 10
+    otp_verify_challenge_window_seconds: int = 900
+
+    otp_verify_ip_limit: int = 30
+    otp_verify_ip_window_seconds: int = 900
+
+    password_login_email_limit: int = 5
+    password_login_email_window_seconds: int = 900
+    password_login_ip_limit: int = 20
+    password_login_ip_window_seconds: int = 900
+
+    sweto_super_admin_email: str | None = None
+    sweto_super_admin_password: str | None = None
+
+    aws_region: str = "af-south-1"
+    aws_s3_uploads_bucket: str | None = None
+    aws_s3_presigned_upload_expiry_seconds: int = Field(default=300, ge=60, le=900)
+    aws_s3_presigned_download_expiry_seconds: int = Field(default=300, ge=60, le=900)
+    aws_s3_endpoint_url: str | None = None
+    aws_access_key_id: str | None = None
+    aws_secret_access_key: str | None = None
+
+    @model_validator(mode="after")
+    def validate_aws_credentials(self) -> "Settings":
+        has_access_key = bool(self.aws_access_key_id)
+        has_secret_key = bool(self.aws_secret_access_key)
+        if has_access_key != has_secret_key:
+            raise ValueError(
+                "AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY "
+                "must be configured together."
+            )
+        return self
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_file_encoding="utf-8", extra="ignore", case_sensitive=False
+    )
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """
+    Return one cached settings instance.
+    Caching prevents the environment file from being re-read every time.
+    settings are requested through dependency injection.
+    """
+    return Settings()
