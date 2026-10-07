@@ -16,6 +16,7 @@ import 'package:sweto_app/core/theme/radius.dart';
 import 'package:sweto_app/core/theme/spacing.dart';
 import 'package:sweto_app/core/theme/text_styles.dart';
 import 'package:sweto_app/features/auth/presentation/auth_providers.dart';
+import 'package:sweto_app/features/auth/presentation/session_controller.dart';
 import 'package:sweto_app/features/auth/presentation/widgets/kenya_phone_field.dart';
 import 'package:sweto_app/features/auth/utils/kenya_phone_formatter.dart';
 import 'package:sweto_app/features/gym_owner/domain/gym_owner_entities.dart';
@@ -2709,9 +2710,9 @@ class _UnsupportedOnboardingScreenState
   Future<void> _logout() async {
     if (_loggingOut) return;
     setState(() => _loggingOut = true);
-    await ref.read(authRepositoryProvider).clearTokens();
-    if (!mounted) return;
-    context.goNamed(AppRoutes.phoneLoginName);
+    // The session controller revokes and clears the session; the router then
+    // returns the user to sign-in.
+    await ref.read(sessionControllerProvider.notifier).logout();
   }
 
   @override
@@ -3437,9 +3438,9 @@ class _VerificationPendingScreenState
   Future<void> _logout() async {
     if (_loggingOut) return;
     setState(() => _loggingOut = true);
-    await ref.read(authRepositoryProvider).clearTokens();
-    if (!mounted) return;
-    context.goNamed(AppRoutes.phoneLoginName);
+    // The session controller revokes and clears the session; the router then
+    // returns the user to sign-in.
+    await ref.read(sessionControllerProvider.notifier).logout();
   }
 
   @override

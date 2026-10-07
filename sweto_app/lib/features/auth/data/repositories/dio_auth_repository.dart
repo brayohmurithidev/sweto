@@ -55,6 +55,17 @@ class DioAuthRepository implements AuthRepository {
   }
 
   @override
+  Future<void> logout(String refreshToken) async {
+    await _dio.post<void>(
+      ApiEndpoints.logout,
+      data: {'refresh_token': refreshToken},
+      options: Options(
+        extra: const {'requiresAuthentication': false, 'skipRefresh': true},
+      ),
+    );
+  }
+
+  @override
   Future<AuthUser> getMe() async {
     final response = await _dio.get<Map<String, dynamic>>(
       ApiEndpoints.currentUser,

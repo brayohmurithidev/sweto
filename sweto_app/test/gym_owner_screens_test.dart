@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
-import 'package:sweto_app/core/router/app_routes.dart';
 import 'package:sweto_app/features/auth/domain/entities/auth_entities.dart';
 import 'package:sweto_app/features/auth/domain/repositories/auth_repository.dart';
 import 'package:sweto_app/features/auth/presentation/auth_providers.dart';
+import 'package:sweto_app/features/auth/presentation/session_controller.dart';
 import 'package:sweto_app/features/gym_owner/presentation/gym_owner_screens.dart';
 
 void main() {
@@ -38,34 +37,59 @@ void main() {
     expect(find.text('Enter your gym name.'), findsOneWidget);
   });
 
-  testWidgets('limited access screen can log out', (tester) async {
+  testWidgets('limited access screen logs out through the session', (
+    tester,
+  ) async {
     final auth = _AuthFake();
-    final router = GoRouter(
-      initialLocation: '/pending',
-      routes: [
-        GoRoute(
-          path: '/pending',
-          builder: (_, _) => const VerificationPendingScreen(),
-        ),
-        GoRoute(
-          path: '/phone',
-          name: AppRoutes.phoneLoginName,
-          builder: (_, _) => const Text('Phone login'),
-        ),
-      ],
+    final container = ProviderContainer(
+      overrides: [authRepositoryProvider.overrideWithValue(auth)],
     );
+    addTearDown(container.dispose);
     await tester.pumpWidget(
-      ProviderScope(
-        overrides: [authRepositoryProvider.overrideWithValue(auth)],
-        child: MaterialApp.router(routerConfig: router),
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: VerificationPendingScreen()),
       ),
     );
 
     await tester.tap(find.byKey(const Key('verification-pending-logout')));
-    await tester.pumpAndSettle();
+    await tester.pump();
 
+    expect(auth.revokedRefreshToken, _storedRefreshToken);
     expect(auth.tokensCleared, isTrue);
-    expect(find.text('Phone login'), findsOneWidget);
+    expect(
+      container.read(sessionControllerProvider),
+      const SessionState(
+        status: SessionStatus.unauthenticated,
+        endReason: SessionEndReason.loggedOut,
+      ),
+    );
+  });
+
+  testWidgets('unsupported onboarding screen logs out through the session', (
+    tester,
+  ) async {
+    final auth = _AuthFake();
+    final container = ProviderContainer(
+      overrides: [authRepositoryProvider.overrideWithValue(auth)],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: UnsupportedOnboardingScreen()),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('unsupported-onboarding-logout')));
+    await tester.pump();
+
+    expect(auth.revokedRefreshToken, _storedRefreshToken);
+    expect(auth.tokensCleared, isTrue);
+    expect(
+      container.read(sessionControllerProvider).status,
+      SessionStatus.unauthenticated,
+    );
   });
 
   testWidgets('unsupported onboarding screen uses recovery language', (
@@ -86,9 +110,12 @@ ProviderScope _scope(_AuthFake auth, Widget child) => ProviderScope(
   child: MaterialApp(home: child),
 );
 
+const _storedRefreshToken = 'stored-refresh-token';
+
 class _AuthFake implements AuthRepository {
   bool roleSelected = false;
   bool tokensCleared = false;
+  String? revokedRefreshToken;
   @override
   Future<void> clearTokens() async {
     tokensCleared = true;
@@ -109,9 +136,14 @@ class _AuthFake implements AuthRepository {
     nextStep: 'gym_setup',
   );
   @override
-  Future<String?> readRefreshToken() async => null;
+  Future<String?> readRefreshToken() async =>
+      tokensCleared ? null : _storedRefreshToken;
   @override
   Future<AuthTokens> refresh(String refreshToken) => throw UnimplementedError();
+  @override
+  Future<void> logout(String refreshToken) async {
+    revokedRefreshToken = refreshToken;
+  }
   @override
   Future<OtpChallenge> requestOtp(String phoneNumber) =>
       throw UnimplementedError();
