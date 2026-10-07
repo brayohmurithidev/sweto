@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:sweto_app/core/network/api_endpoints.dart';
 import 'package:sweto_app/core/network/api_response.dart';
 import 'package:sweto_app/core/storage/token_storage.dart';
@@ -86,9 +85,6 @@ class DioAuthRepository implements AuthRepository {
     final response = await _dio.get<Map<String, dynamic>>(
       ApiEndpoints.accountOnboarding,
     );
-    if (kDebugMode) {
-      debugPrint('ACCOUNT ONBOARDING RAW RESPONSE: ${response.data}');
-    }
     return _envelope(response.data, _onboardingFromData);
   }
 
@@ -98,9 +94,6 @@ class DioAuthRepository implements AuthRepository {
       ApiEndpoints.accountRoles,
       data: const {'role': 'gym_owner'},
     );
-    if (kDebugMode) {
-      debugPrint('ROLE SELECTION ONBOARDING RAW RESPONSE: ${response.data}');
-    }
     return _envelope(response.data, _onboardingFromData);
   }
 

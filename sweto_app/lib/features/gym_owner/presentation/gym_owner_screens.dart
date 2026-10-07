@@ -3118,7 +3118,8 @@ class _GymVerificationSetupScreenState
       });
     } catch (error) {
       if (kDebugMode) {
-        debugPrint('VERIFICATION DOCUMENT UPLOAD FAILED: $error');
+        // Log the type only: upload errors can carry presigned URLs.
+        debugPrint('Verification document upload failed: ${error.runtimeType}');
       }
       if (mounted) {
         setState(() => _error = _friendlyVerificationUploadError(error));
