@@ -390,6 +390,7 @@ class AuthenticationService:
         await self._enforce_otp_request_limits(
             phone_number=phone_number,
             requested_ip=requested_ip,
+            require_mobile=True,
         )
 
         now = datetime.now(UTC)
