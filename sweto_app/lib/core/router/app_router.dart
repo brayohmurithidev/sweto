@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sweto_app/core/config/config_providers.dart';
 import 'package:sweto_app/core/router/app_routes.dart';
 import 'package:sweto_app/core/router/session_redirect.dart';
 import 'package:sweto_app/features/auth/presentation/session_controller.dart';
@@ -41,6 +42,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     sessionControllerProvider,
     (_, next) => sessionStatus.value = next.status,
   );
+
+  final isProduction = ref.read(appConfigProvider).isProduction;
 
   final router = GoRouter(
     initialLocation: AppRoutes.splashPath,
@@ -159,13 +162,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           return const PhoneLoginScreen();
         },
       ),
-      GoRoute(
-        path: AppRoutes.healthPath,
-        name: AppRoutes.healthName,
-        builder: (context, state) {
-          return const HealthCheckScreen();
-        },
-      ),
+      // Developer diagnostics; not shipped in production builds.
+      if (!isProduction)
+        GoRoute(
+          path: AppRoutes.healthPath,
+          name: AppRoutes.healthName,
+          builder: (context, state) {
+            return const HealthCheckScreen();
+          },
+        ),
     ],
   );
 
