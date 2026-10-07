@@ -43,6 +43,8 @@ from app.modules.gyms.exceptions import (
     GymAccessDeniedError,
     GymAlreadyExistsError,
     GymNotFoundError,
+    GymPhotoLimitReachedError,
+    GymPhotoUploadInvalidError,
     GymProfileIncompleteError,
     GymSlugConflictError,
     GymVerificationAccessDeniedError,
@@ -581,6 +583,24 @@ async def storage_error_handler(_: Request, exception: Exception) -> JSONRespons
     }
     status_code, code = mappings.get(type(exception), (500, "STORAGE_ERROR"))
     return error_response(status_code=status_code, code=code, message=str(exception))
+
+
+async def gym_photo_error_handler(_: Request, exception: Exception) -> JSONResponse:
+    """Return client errors for rejected gym-photo uploads."""
+
+    if isinstance(exception, GymPhotoLimitReachedError):
+        return error_response(
+            status_code=status.HTTP_409_CONFLICT,
+            code="GYM_PHOTO_LIMIT_REACHED",
+            message=str(exception),
+        )
+    if isinstance(exception, GymPhotoUploadInvalidError):
+        return error_response(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            code="GYM_PHOTO_INVALID",
+            message=str(exception),
+        )
+    raise exception
 
 
 async def gym_already_exists_handler(
