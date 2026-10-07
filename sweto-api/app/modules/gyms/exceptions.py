@@ -48,6 +48,16 @@ class GymVerificationRequirementsError(GymError):
         )
 
 
+class GymProfileIncompleteError(GymError):
+    """Raised when verification is submitted before the gym profile is done."""
+
+    def __init__(self, next_step: str) -> None:
+        self.next_step = next_step
+        super().__init__(
+            "Complete your gym profile before submitting it for verification."
+        )
+
+
 class GymVerificationAlreadyPendingError(GymError):
     """Raised when verification is already under review."""
 

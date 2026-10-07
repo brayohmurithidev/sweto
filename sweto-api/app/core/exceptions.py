@@ -43,6 +43,7 @@ from app.modules.gyms.exceptions import (
     GymAccessDeniedError,
     GymAlreadyExistsError,
     GymNotFoundError,
+    GymProfileIncompleteError,
     GymSlugConflictError,
     GymVerificationAccessDeniedError,
     GymVerificationAlreadyApprovedError,
@@ -535,6 +536,7 @@ async def gym_verification_error_handler(
         ),
         GymVerificationDocumentInvalidError: (422, "GYM_VERIFICATION_DOCUMENT_INVALID"),
         GymVerificationRequirementsError: (422, "GYM_VERIFICATION_DOCUMENTS_MISSING"),
+        GymProfileIncompleteError: (422, "GYM_PROFILE_INCOMPLETE"),
         GymVerificationAlreadyPendingError: (409, "GYM_VERIFICATION_ALREADY_PENDING"),
         GymVerificationAlreadyApprovedError: (409, "GYM_VERIFICATION_ALREADY_APPROVED"),
         GymVerificationReviewInProgressError: (
@@ -555,6 +557,8 @@ async def gym_verification_error_handler(
     details: dict[str, object] | None = None
     if isinstance(exception, GymVerificationRequirementsError):
         details = {"missing_document_types": exception.missing_document_types}
+    elif isinstance(exception, GymProfileIncompleteError):
+        details = {"next_step": exception.next_step}
     return error_response(
         status_code=status_code, code=code, message=str(exception), details=details
     )

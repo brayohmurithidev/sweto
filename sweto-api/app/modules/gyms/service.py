@@ -32,6 +32,7 @@ from app.modules.gyms.exceptions import (
     GymNotFoundError,
     GymPhotoLimitReachedError,
     GymPhotoUploadInvalidError,
+    GymProfileIncompleteError,
     GymSlugConflictError,
     GymVerificationAccessDeniedError,
     GymVerificationAlreadyApprovedError,
@@ -1557,6 +1558,14 @@ class GymService:
         if gym.verification_status == GymVerificationStatus.APPROVED:
             raise GymVerificationAlreadyApprovedError(
                 "This gym has already been approved."
+            )
+
+        # Every profile step (location, business details, amenities, hours,
+        # pricing) must be finished before review; a rejected gym returns to
+        # the verification step, so resubmission is allowed.
+        if gym.onboarding_step != GymOnboardingStep.VERIFICATION:
+            raise GymProfileIncompleteError(
+                self._resolve_next_step(gym.onboarding_step) or "verification"
             )
 
         documents = await self.verification_repository.list_documents(gym.id)
