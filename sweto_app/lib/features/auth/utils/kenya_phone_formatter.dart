@@ -51,6 +51,17 @@ class KenyaPhoneFormatter extends TextInputFormatter {
         '${digits.substring(6)}';
   }
 
+  /// Formats a stored number (for example E.164 `+254712345678`) for a
+  /// [KenyaPhoneField], which already shows the +254 prefix: `712 345 678`.
+  ///
+  /// Text assigned to a controller in code skips input formatters, so values
+  /// that pre-fill the field must go through this instead.
+  static String formatForField(String value) {
+    return const KenyaPhoneFormatter()
+        .formatEditUpdate(TextEditingValue.empty, TextEditingValue(text: value))
+        .text;
+  }
+
   static String digitsOnly(String value) {
     return value.replaceAll(RegExp(r'\D'), '');
   }

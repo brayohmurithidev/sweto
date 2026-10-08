@@ -232,7 +232,9 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
         .getMe()
         .then((user) {
           if (!mounted) return;
-          _phone.text = _displayPhone(user.phoneNumber ?? '');
+          _phone.text = KenyaPhoneFormatter.formatForField(
+            user.phoneNumber ?? '',
+          );
           _email.text = user.email ?? '';
         })
         .catchError((_) {});
@@ -246,7 +248,9 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
               _gymId = gym.id;
               _editing = true;
               _name.text = gym.name;
-              _phone.text = _displayPhone(gym.phoneNumber ?? '');
+              _phone.text = KenyaPhoneFormatter.formatForField(
+                gym.phoneNumber ?? '',
+              );
               _email.text = gym.email ?? '';
               _description.text = gym.description ?? '';
             });
@@ -601,13 +605,6 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
       ),
     ),
   );
-
-  String _displayPhone(String value) {
-    final digits = KenyaPhoneFormatter.digitsOnly(value);
-    final local = digits.startsWith('254') ? digits.substring(3) : digits;
-    if (local.length != 9) return value;
-    return '+254 ${local.substring(0, 3)} ${local.substring(3, 6)} ${local.substring(6)}';
-  }
 }
 
 enum _PhotoStatus {
@@ -1899,7 +1896,7 @@ class _GymBusinessDetailsScreenState
         _contact.text = gym.contactPersonName ?? '';
         _phone.text = gym.contactPersonPhone == null
             ? ''
-            : _displayPhone(gym.contactPersonPhone!);
+            : KenyaPhoneFormatter.formatForField(gym.contactPersonPhone!);
         _loading = false;
       });
     } catch (_) {
@@ -1974,14 +1971,6 @@ class _GymBusinessDetailsScreenState
     } finally {
       if (mounted) setState(() => _saving = false);
     }
-  }
-
-  static String _displayPhone(String value) {
-    final digits = KenyaPhoneFormatter.digitsOnly(value);
-    final local = digits.startsWith('254') ? digits.substring(3) : digits;
-    return local.length == 9
-        ? '+254 ${local.substring(0, 3)} ${local.substring(3, 6)} ${local.substring(6)}'
-        : value;
   }
 
   @override

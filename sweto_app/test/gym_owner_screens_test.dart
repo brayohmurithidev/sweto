@@ -37,6 +37,19 @@ void main() {
     expect(find.text('Enter your gym name.'), findsOneWidget);
   });
 
+  testWidgets('gym registration pre-fills the phone without a second +254', (
+    tester,
+  ) async {
+    await tester.pumpWidget(_scope(_AuthFake(), const GymRegistrationScreen()));
+    await tester.pump();
+    final field = tester.widget<TextField>(
+      find.byKey(const Key('gym-phone-input')),
+    );
+    expect(field.controller!.text, '712 345 678');
+    // The only +254 on screen is the field's country prefix.
+    expect(find.textContaining('+254'), findsOneWidget);
+  });
+
   testWidgets('limited access screen logs out through the session', (
     tester,
   ) async {
