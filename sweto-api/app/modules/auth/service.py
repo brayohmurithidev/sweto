@@ -1,16 +1,18 @@
-import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.integrations.sms.base import SMSDeliveryError, SMSProvider
+from app.integrations.delivery import OTPDeliveryError
 from app.modules.auth.audit import AuthAuditLogger
+from app.modules.auth.delivery_status import DeliveryStatusService
 from app.modules.auth.enums import (
     AuthEventOutcome,
     AuthEventType,
+    OTPDeliveryStatus,
     OTPPurpose,
     OTPStatus,
     SessionStatus,
@@ -41,6 +43,7 @@ from app.modules.auth.models import (
     RefreshSession,
     User,
 )
+from app.modules.auth.otp_delivery import OTPDelivery
 from app.modules.auth.phone import normalize_phone_number
 from app.modules.auth.repository import (
     OTPChallengeRepository,
@@ -52,6 +55,7 @@ from app.modules.auth.schemas import (
     ChangePasswordData,
     ChangePasswordRequest,
     LogoutAllData,
+    OTPDeliveryData,
     PasswordLoginData,
     PasswordLoginRequest,
     RefreshTokenData,
@@ -84,6 +88,9 @@ logger = logging.getLogger(__name__)
 
 _DUMMY_PASSWORD_HASH = hash_password("invalid-password-login-placeholder")
 
+# Partial unique index: one pending challenge per phone number and purpose.
+_ONE_PENDING_INDEX = "uq_otp_challenges_one_pending"
+
 
 class AuthenticationService:
     """Application service for authentication workflows."""
@@ -93,12 +100,12 @@ class AuthenticationService:
         *,
         session: AsyncSession,
         settings: Settings,
-        sms_provider: SMSProvider,
+        otp_delivery: OTPDelivery,
         rate_limiter: RateLimiter,
     ) -> None:
         self.session = session
         self.settings = settings
-        self.sms_provider = sms_provider
+        self.otp_delivery = otp_delivery
         self.rate_limiter = rate_limiter
 
         self.otp_repository = OTPChallengeRepository(session)
@@ -392,6 +399,7 @@ class AuthenticationService:
             default_region=self.settings.default_phone_region,
             require_mobile=True,
         )
+        channel = self.otp_delivery.channel_for(phone_number)
 
         await self._enforce_otp_request_limits(
             phone_number=phone_number,
@@ -451,6 +459,7 @@ class AuthenticationService:
             phone_number=phone_number,
             purpose=OTPPurpose.LOGIN,
             status=OTPStatus.PENDING,
+            delivery_channel=channel,
             code_hash=hash_otp(
                 challenge_id=challenge_id,
                 phone_number=phone_number,
@@ -465,7 +474,19 @@ class AuthenticationService:
 
         self.otp_repository.add(challenge)
 
-        await self.session.flush()
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            await self.session.rollback()
+            if _ONE_PENDING_INDEX not in str(exc.orig):
+                raise
+            # Another request for this number created a pending challenge
+            # between our check and insert (one pending code per number).
+            raise await self._concurrent_request_blocked(
+                phone_number=phone_number,
+                requested_ip=requested_ip,
+                user_agent=user_agent,
+            ) from exc
 
         self.audit_logger.record(
             event_type=AuthEventType.OTP_REQUESTED,
@@ -477,6 +498,7 @@ class AuthenticationService:
             metadata={
                 "purpose": OTPPurpose.LOGIN.value,
                 "expires_in_seconds": self.settings.otp_expiry_seconds,
+                "channel": channel.value,
             },
         )
 
@@ -484,27 +506,121 @@ class AuthenticationService:
         await self.session.refresh(challenge)
 
         try:
-            async with asyncio.timeout(self.settings.sms_send_timeout_seconds):
-                await self.sms_provider.send_otp(
-                    phone_number=phone_number,
-                    otp_code=otp_code,
-                    expires_in_seconds=self.settings.otp_expiry_seconds,
-                )
+            provider_message_id = await self.otp_delivery.send(
+                channel=channel,
+                phone_number=phone_number,
+                otp_code=otp_code,
+                expires_in_seconds=self.settings.otp_expiry_seconds,
+            )
         except Exception as exc:
-            await self._record_otp_delivery_failure(
+            retryable = await self._record_otp_delivery_failure(
                 challenge=challenge,
                 error=exc,
                 requested_ip=requested_ip,
                 user_agent=user_agent,
             )
-            raise OTPDeliveryFailedError() from exc
+            raise OTPDeliveryFailedError(channel=channel, retryable=retryable) from exc
 
-        return RequestOTPData(
-            challenge_id=str(challenge.id),
+        data = RequestOTPData(
+            challenge_id=challenge.id,
             phone_number=challenge.phone_number,
             expires_at=challenge.expires_at,
             resend_available_at=resend_available_at,
             expires_in_seconds=self.settings.otp_expiry_seconds,
+            delivery_channel=channel,
+        )
+
+        # Accepted by the provider. Whether it arrived is reported later
+        # (WhatsApp status webhook); acceptance is not delivery.
+        challenge.provider_message_id = provider_message_id
+        challenge.delivery_status = OTPDeliveryStatus.ACCEPTED
+        challenge.delivery_status_updated_at = datetime.now(UTC)
+        try:
+            # A report may have beaten us here; apply it now.
+            await DeliveryStatusService(self.session).apply_buffered(challenge)
+            await self.session.commit()
+        except SQLAlchemyError:
+            # The code was sent, so the request still succeeds; only delivery
+            # tracking for this message is lost.
+            await self.session.rollback()
+            logger.warning(
+                "Could not record provider acceptance for challenge %s",
+                data.challenge_id,
+            )
+
+        return data
+
+    async def _concurrent_request_blocked(
+        self,
+        *,
+        phone_number: str,
+        requested_ip: str | None,
+        user_agent: str | None,
+    ) -> OTPResendCooldownError:
+        """Treat a lost race for the one pending code like the resend cooldown."""
+
+        latest = await self.otp_repository.get_latest_pending(
+            phone_number=phone_number,
+            purpose=OTPPurpose.LOGIN,
+        )
+        retry_after_seconds = self.settings.otp_resend_cooldown_seconds
+        if latest is not None:
+            available_at = latest.created_at + timedelta(
+                seconds=self.settings.otp_resend_cooldown_seconds
+            )
+            retry_after_seconds = max(
+                1, int((available_at - datetime.now(UTC)).total_seconds())
+            )
+        self.audit_logger.record(
+            event_type=AuthEventType.OTP_REQUEST_BLOCKED,
+            outcome=AuthEventOutcome.BLOCKED,
+            challenge_id=latest.id if latest is not None else None,
+            phone_number=phone_number,
+            ip_address=requested_ip,
+            user_agent=user_agent,
+            metadata={
+                "reason": "concurrent_request",
+                "retry_after_seconds": retry_after_seconds,
+            },
+        )
+        await self.session.commit()
+        return OTPResendCooldownError(retry_after_seconds=retry_after_seconds)
+
+    async def get_otp_delivery(
+        self, *, challenge_id: UUID, ip_address: str | None
+    ) -> OTPDeliveryData:
+        """Return where a sign-in code is on its way to the user.
+
+        Lets the app tell the user quickly when WhatsApp could not deliver
+        the code. Reveals no phone number and nothing about code validity,
+        is rate limited per IP, and stops answering once the code expired.
+        """
+
+        if ip_address is not None:
+            limit = await self.rate_limiter.consume(
+                key=f"otp-delivery:ip:{ip_address}",
+                limit=self.settings.otp_delivery_status_ip_limit,
+                window_seconds=self.settings.otp_delivery_status_ip_window_seconds,
+            )
+            if not limit.allowed:
+                raise AuthenticationRateLimitError(
+                    code="OTP_DELIVERY_STATUS_RATE_LIMITED",
+                    message="Too many delivery checks. Please wait a moment.",
+                    retry_after_seconds=limit.retry_after_seconds,
+                    limit=limit.limit,
+                )
+
+        challenge = await self.otp_repository.get_by_id(challenge_id=challenge_id)
+        if (
+            challenge is None
+            or challenge.purpose is not OTPPurpose.LOGIN
+            or challenge.expires_at < datetime.now(UTC)
+        ):
+            raise OTPChallengeNotFoundError("The verification challenge was not found.")
+        return OTPDeliveryData(
+            challenge_id=challenge.id,
+            delivery_channel=challenge.delivery_channel,
+            delivery_status=challenge.delivery_status,
         )
 
     async def _record_otp_delivery_failure(
@@ -514,22 +630,28 @@ class AuthenticationService:
         error: Exception,
         requested_ip: str | None,
         user_agent: str | None,
-    ) -> None:
+    ) -> bool:
         """Retire an undelivered challenge so the user can request a new code.
 
         The challenge is expired rather than left pending, which would hold
         the user in the resend cooldown for a code that never arrived. Only
         the failure category is recorded; the code itself is never logged.
+        Returns whether retrying the same channel could succeed.
         """
 
+        provider_code: str | None = None
         if isinstance(error, TimeoutError):
             reason, retryable = "timeout", True
-        elif isinstance(error, SMSDeliveryError):
+        elif isinstance(error, OTPDeliveryError):
             reason, retryable = error.reason, error.retryable
+            provider_code = error.provider_code
         else:
             reason, retryable = f"unexpected_{type(error).__name__}", True
 
         challenge.status = OTPStatus.EXPIRED
+        challenge.delivery_status = OTPDeliveryStatus.FAILED
+        challenge.delivery_status_updated_at = datetime.now(UTC)
+        challenge.delivery_error_code = (provider_code or reason)[:32]
 
         self.audit_logger.record(
             event_type=AuthEventType.OTP_DELIVERY_FAILED,
@@ -538,17 +660,25 @@ class AuthenticationService:
             phone_number=challenge.phone_number,
             ip_address=requested_ip,
             user_agent=user_agent,
-            metadata={"reason": reason, "retryable": retryable},
+            metadata={
+                "reason": reason,
+                "retryable": retryable,
+                "channel": challenge.delivery_channel.value,
+                "provider_code": provider_code,
+            },
         )
 
         await self.session.commit()
 
         logger.warning(
-            "OTP delivery failed for challenge %s (reason=%s, retryable=%s)",
+            "OTP delivery failed for challenge %s (channel=%s, reason=%s, "
+            "retryable=%s)",
             challenge.id,
+            challenge.delivery_channel.value,
             reason,
             retryable,
         )
+        return retryable
 
     async def verify_login_otp(
         self,

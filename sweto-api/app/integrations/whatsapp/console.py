@@ -3,8 +3,8 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-class ConsoleSMSProvider:
-    """Development provider that writes OTP messages to application logs."""
+class ConsoleWhatsAppProvider:
+    """Development provider that writes WhatsApp OTPs to application logs."""
 
     async def send_otp(
         self,
@@ -14,7 +14,7 @@ class ConsoleSMSProvider:
         expires_in_seconds: int,
     ) -> str | None:
         logger.warning(
-            "SWETO DEVELOPMENT OTP | phone=%s code=%s expires_in=%ss",
+            "SWETO DEVELOPMENT WHATSAPP OTP | phone=%s code=%s expires_in=%ss",
             phone_number,
             otp_code,
             expires_in_seconds,

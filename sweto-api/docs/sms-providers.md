@@ -1,8 +1,11 @@
 # SMS providers
 
-Authentication sends OTPs through the `SMSProvider` protocol
-(`app/integrations/sms/base.py`). The auth domain never talks to a provider
-directly, so a provider can be replaced without touching authentication.
+Authentication sends OTPs through `OTPDelivery`
+(`app/modules/auth/otp_delivery.py`), which picks the channel by country and
+calls that channel's provider. Kenyan numbers use the `SMSProvider` protocol
+(`app/integrations/sms/base.py`); other countries use WhatsApp (see
+`whatsapp-otp.md`). The auth domain never talks to a provider directly, so a
+provider can be replaced without touching authentication.
 
 ## Contract
 
@@ -24,8 +27,8 @@ directly, so a provider can be replaced without touching authentication.
 The challenge is marked `expired` (so the user is not held in the 60-second
 resend cooldown for a code that never arrived), an `otp_delivery_failed`
 audit event is recorded with the reason, and the API answers
-`503 OTP_DELIVERY_FAILED` ("We couldn't send your verification code. Please
-try again."). The per-phone and per-IP rate limits still count the attempt.
+`503 OTP_DELIVERY_FAILED` ("We couldn't send your verification code by SMS.
+Please try again.") with `details.channel` and `details.retryable`. The per-phone and per-IP rate limits still count the attempt.
 
 ## Providers
 
