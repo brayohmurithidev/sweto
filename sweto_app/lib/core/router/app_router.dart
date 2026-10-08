@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sweto_app/core/config/config_providers.dart';
 import 'package:sweto_app/core/router/app_routes.dart';
+import 'package:sweto_app/core/router/session_redirect.dart';
+import 'package:sweto_app/features/auth/presentation/session_controller.dart';
 import 'package:sweto_app/features/auth/presentation/phone_login_screen.dart';
 import 'package:sweto_app/features/auth/presentation/otp_verification_screen.dart';
 import 'package:sweto_app/features/auth/domain/entities/auth_entities.dart';
@@ -30,8 +33,23 @@ CustomTransitionPage<void> _onboardingPage(GoRouterState state, Widget child) =>
     );
 
 final appRouterProvider = Provider<GoRouter>((ref) {
-  return GoRouter(
+  // Mirrors the session status so GoRouter re-runs [sessionRedirect] whenever
+  // the user signs in, logs out or their session expires.
+  final sessionStatus = ValueNotifier<SessionStatus>(
+    ref.read(sessionControllerProvider).status,
+  );
+  ref.listen<SessionState>(
+    sessionControllerProvider,
+    (_, next) => sessionStatus.value = next.status,
+  );
+
+  final isProduction = ref.read(appConfigProvider).isProduction;
+
+  final router = GoRouter(
     initialLocation: AppRoutes.splashPath,
+    refreshListenable: sessionStatus,
+    redirect: (context, state) =>
+        sessionRedirect(sessionStatus.value, state.uri.path),
     routes: [
       GoRoute(
         path: AppRoutes.accountTypePath,
@@ -144,15 +162,24 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           return const PhoneLoginScreen();
         },
       ),
-      GoRoute(
-        path: AppRoutes.healthPath,
-        name: AppRoutes.healthName,
-        builder: (context, state) {
-          return const HealthCheckScreen();
-        },
-      ),
+      // Developer diagnostics; not shipped in production builds.
+      if (!isProduction)
+        GoRoute(
+          path: AppRoutes.healthPath,
+          name: AppRoutes.healthName,
+          builder: (context, state) {
+            return const HealthCheckScreen();
+          },
+        ),
     ],
   );
+
+  ref.onDispose(() {
+    router.dispose();
+    sessionStatus.dispose();
+  });
+
+  return router;
 });
 
 class _AuthenticatedPlaceholder extends StatelessWidget {

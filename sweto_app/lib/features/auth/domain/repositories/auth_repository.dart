@@ -7,6 +7,9 @@ abstract interface class AuthRepository {
     required String code,
   });
   Future<AuthTokens> refresh(String refreshToken);
+
+  /// Revokes the given refresh session on the server.
+  Future<void> logout(String refreshToken);
   Future<AuthUser> getMe();
   Future<AccountOnboarding> getOnboarding();
   Future<AccountOnboarding> selectGymOwnerRole();

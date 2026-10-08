@@ -13,9 +13,8 @@ import 'package:sweto_app/core/theme/text_styles.dart';
 import 'package:sweto_app/features/auth/domain/entities/auth_entities.dart';
 import 'package:sweto_app/features/auth/presentation/auth_providers.dart';
 import 'package:sweto_app/shared/widgets/app_primary_button.dart';
+import 'package:sweto_app/features/auth/presentation/session_controller.dart';
 import 'package:sweto_app/shared/widgets/sweto_logo.dart';
-import 'package:sweto_app/features/gym_owner/presentation/onboarding_coordinator.dart';
-import 'package:sweto_app/features/gym_owner/presentation/gym_owner_screens.dart';
 
 class OtpVerificationScreen extends ConsumerStatefulWidget {
   const OtpVerificationScreen({required this.challenge, super.key});
@@ -104,19 +103,12 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
     FocusScope.of(context).unfocus();
     setState(() => _verifying = true);
     try {
-      final repo = ref.read(authRepositoryProvider);
-      final tokens = await repo.verifyOtp(
-        challengeId: _challenge.challengeId,
-        code: _controller.text,
-      );
-      await repo.saveTokens(tokens);
-      await repo.getMe();
-      final onboarding = await repo.getOnboarding();
-      final destination = await ref
-          .read(onboardingCoordinatorProvider)
-          .resolveAccount(onboarding);
-      if (!mounted) return;
-      goToDestination(context, destination);
+      final tokens = await ref
+          .read(authRepositoryProvider)
+          .verifyOtp(challengeId: _challenge.challengeId, code: _controller.text);
+      // Starting the session is all this screen does. The router then leaves
+      // the sign-in flow and the splash screen resolves the destination.
+      await ref.read(sessionControllerProvider.notifier).signIn(tokens);
     } on DioException catch (e) {
       final apiError = e.error;
       await _showVerificationError(

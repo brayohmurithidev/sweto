@@ -6,7 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sweto_app/core/network/api_exception.dart';
 import 'package:sweto_app/core/router/app_routes.dart';
 import 'package:sweto_app/features/auth/presentation/auth_providers.dart';
+import 'package:sweto_app/features/auth/presentation/session_controller.dart';
 import 'package:sweto_app/core/theme/colors.dart';
+import 'package:sweto_app/core/theme/radius.dart';
 import 'package:sweto_app/core/theme/spacing.dart';
 import 'package:sweto_app/core/theme/text_styles.dart';
 import 'package:sweto_app/features/auth/presentation/widgets/kenya_phone_field.dart';
@@ -88,6 +90,7 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
         return;
       }
 
+      ref.read(sessionControllerProvider.notifier).clearEndReason();
       context.pushNamed(AppRoutes.otpName, extra: challenge);
     } on DioException catch (error) {
       final apiError = error.error;
@@ -127,6 +130,10 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final sessionExpired =
+        ref.watch(sessionControllerProvider).endReason ==
+        SessionEndReason.expired;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -176,6 +183,11 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
                         ),
 
                         const SizedBox(height: AppSpacing.xl),
+
+                        if (sessionExpired) ...[
+                          const _SessionExpiredNotice(),
+                          const SizedBox(height: AppSpacing.lg),
+                        ],
 
                         Text(
                           'Phone number',
@@ -236,6 +248,45 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
               );
             },
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SessionExpiredNotice extends StatelessWidget {
+  const _SessionExpiredNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        key: const Key('session-expired-message'),
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          border: Border.all(color: AppColors.warning),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.lock_outline_rounded,
+              color: AppColors.warning,
+              size: 20,
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Expanded(
+              child: Text(
+                sessionExpiredMessage,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

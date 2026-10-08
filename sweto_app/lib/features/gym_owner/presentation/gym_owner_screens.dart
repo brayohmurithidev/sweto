@@ -16,6 +16,7 @@ import 'package:sweto_app/core/theme/radius.dart';
 import 'package:sweto_app/core/theme/spacing.dart';
 import 'package:sweto_app/core/theme/text_styles.dart';
 import 'package:sweto_app/features/auth/presentation/auth_providers.dart';
+import 'package:sweto_app/features/auth/presentation/session_controller.dart';
 import 'package:sweto_app/features/auth/presentation/widgets/kenya_phone_field.dart';
 import 'package:sweto_app/features/auth/utils/kenya_phone_formatter.dart';
 import 'package:sweto_app/features/gym_owner/domain/gym_owner_entities.dart';
@@ -2709,13 +2710,14 @@ class _UnsupportedOnboardingScreenState
   Future<void> _logout() async {
     if (_loggingOut) return;
     setState(() => _loggingOut = true);
-    await ref.read(authRepositoryProvider).clearTokens();
-    if (!mounted) return;
-    context.goNamed(AppRoutes.phoneLoginName);
+    // The session controller revokes and clears the session; the router then
+    // returns the user to sign-in.
+    await ref.read(sessionControllerProvider.notifier).logout();
   }
 
   @override
   Widget build(BuildContext context) => _OnboardingScaffold(
+    showAccountMenu: false,
     child: Column(
       children: [
         const KeyedSubtree(
@@ -3117,7 +3119,8 @@ class _GymVerificationSetupScreenState
       });
     } catch (error) {
       if (kDebugMode) {
-        debugPrint('VERIFICATION DOCUMENT UPLOAD FAILED: $error');
+        // Log the type only: upload errors can carry presigned URLs.
+        debugPrint('Verification document upload failed: ${error.runtimeType}');
       }
       if (mounted) {
         setState(() => _error = _friendlyVerificationUploadError(error));
@@ -3437,13 +3440,14 @@ class _VerificationPendingScreenState
   Future<void> _logout() async {
     if (_loggingOut) return;
     setState(() => _loggingOut = true);
-    await ref.read(authRepositoryProvider).clearTokens();
-    if (!mounted) return;
-    context.goNamed(AppRoutes.phoneLoginName);
+    // The session controller revokes and clears the session; the router then
+    // returns the user to sign-in.
+    await ref.read(sessionControllerProvider.notifier).logout();
   }
 
   @override
   Widget build(BuildContext context) => _OnboardingScaffold(
+    showAccountMenu: false,
     child: Column(
       children: [
         const KeyedSubtree(
@@ -3480,10 +3484,33 @@ class _VerificationPendingScreenState
 }
 
 class _OnboardingScaffold extends StatelessWidget {
-  const _OnboardingScaffold({required this.child});
+  const _OnboardingScaffold({
+    required this.child,
+    this.showAccountMenu = true,
+  });
   final Widget child;
+
+  /// Shows a top-right menu with "Log out" so an owner is never stuck in
+  /// onboarding. Screens with their own logout button turn it off.
+  final bool showAccountMenu;
+
   @override
   Widget build(BuildContext context) {
+    final page = _buildPage(context);
+    if (!showAccountMenu) return page;
+    return Stack(
+      children: [
+        page,
+        const Positioned(
+          top: 0,
+          right: 0,
+          child: SafeArea(child: _OnboardingAccountMenu()),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPage(BuildContext context) {
     final bodyPadding = EdgeInsets.fromLTRB(
       AppSpacing.md,
       AppSpacing.lg,
@@ -3546,6 +3573,52 @@ class _OnboardingScaffold extends StatelessWidget {
           padding: bodyPadding,
           child: child,
         ),
+      ),
+    );
+  }
+}
+
+class _OnboardingAccountMenu extends ConsumerWidget {
+  const _OnboardingAccountMenu();
+
+  Future<void> _logout(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showSwetoConfirmationDialog(
+      context,
+      title: 'Log out of SWETO?',
+      message:
+          'Your gym setup is saved. Sign in again with your phone number to '
+          'continue where you left off.',
+      confirmLabel: 'Log out',
+      type: SwetoDialogType.info,
+    );
+    if (!confirmed) return;
+    // The session controller revokes and clears the session; the router then
+    // returns the user to sign-in.
+    await ref.read(sessionControllerProvider.notifier).logout();
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Material(
+      type: MaterialType.transparency,
+      child: PopupMenuButton<String>(
+        key: const Key('onboarding-account-menu'),
+        tooltip: 'Account',
+        icon: const Icon(
+          Icons.more_vert_rounded,
+          color: AppColors.textSecondary,
+        ),
+        color: AppColors.surfaceElevated,
+        onSelected: (value) {
+          if (value == 'logout') _logout(context, ref);
+        },
+        itemBuilder: (context) => const [
+          PopupMenuItem<String>(
+            key: Key('onboarding-account-menu-logout'),
+            value: 'logout',
+            child: Text('Log out'),
+          ),
+        ],
       ),
     );
   }

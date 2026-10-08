@@ -8,6 +8,7 @@ class ApiEndpoints {
   static const verifyOtp = '/api/v1/auth/verify-otp';
 
   static const refreshToken = '/api/v1/auth/refresh';
+  static const logout = '/api/v1/auth/logout';
 
   static const currentUser = '/api/v1/auth/me';
   static const accountOnboarding = '/api/v1/account/onboarding';
