@@ -92,6 +92,52 @@ void main() {
     );
   });
 
+  testWidgets('onboarding steps offer logout from the account menu', (
+    tester,
+  ) async {
+    final auth = _AuthFake();
+    final container = ProviderContainer(
+      overrides: [authRepositoryProvider.overrideWithValue(auth)],
+    );
+    addTearDown(container.dispose);
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: container,
+        child: const MaterialApp(home: AccountTypeScreen()),
+      ),
+    );
+
+    await tester.tap(find.byKey(const Key('onboarding-account-menu')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('onboarding-account-menu-logout')));
+    await tester.pumpAndSettle();
+    expect(find.text('Log out of SWETO?'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Log out'));
+    await tester.pumpAndSettle();
+
+    expect(auth.revokedRefreshToken, _storedRefreshToken);
+    expect(auth.tokensCleared, isTrue);
+    expect(
+      container.read(sessionControllerProvider).status,
+      SessionStatus.unauthenticated,
+    );
+  });
+
+  testWidgets('screens with their own logout do not repeat it in a menu', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _scope(_AuthFake(), const VerificationPendingScreen()),
+    );
+    expect(find.byKey(const Key('onboarding-account-menu')), findsNothing);
+
+    await tester.pumpWidget(
+      _scope(_AuthFake(), const UnsupportedOnboardingScreen()),
+    );
+    expect(find.byKey(const Key('onboarding-account-menu')), findsNothing);
+  });
+
   testWidgets('unsupported onboarding screen uses recovery language', (
     tester,
   ) async {
