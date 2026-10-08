@@ -50,6 +50,22 @@ void main() {
     expect(find.textContaining('+254'), findsOneWidget);
   });
 
+  test('verification document types can open the iOS document picker', () {
+    final group = verificationDocumentTypeGroup;
+    // file_selector_ios rejects a group that neither allows any file nor
+    // lists uniform type identifiers, so the picker never opens.
+    expect(group.allowsAny, isFalse);
+    expect(
+      group.uniformTypeIdentifiers,
+      unorderedEquals(['com.adobe.pdf', 'public.jpeg', 'public.png']),
+    );
+    expect(
+      group.mimeTypes,
+      unorderedEquals(['application/pdf', 'image/jpeg', 'image/png']),
+    );
+    expect(group.extensions, unorderedEquals(['pdf', 'jpg', 'jpeg', 'png']));
+  });
+
   testWidgets('limited access screen logs out through the session', (
     tester,
   ) async {

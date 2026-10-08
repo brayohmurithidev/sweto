@@ -2849,6 +2849,18 @@ class _VerificationDocumentCard extends StatelessWidget {
   );
 }
 
+/// File types accepted for verification documents.
+///
+/// Each platform filters differently: iOS needs uniform type identifiers (the
+/// iOS file_selector implementation throws without them, before the picker
+/// opens), Android and web use MIME types, desktop uses extensions.
+final verificationDocumentTypeGroup = XTypeGroup(
+  label: 'Verification documents',
+  extensions: const ['pdf', 'jpg', 'jpeg', 'png'],
+  mimeTypes: const ['application/pdf', 'image/jpeg', 'image/png'],
+  uniformTypeIdentifiers: const ['com.adobe.pdf', 'public.jpeg', 'public.png'],
+);
+
 class GymVerificationSetupScreen extends ConsumerStatefulWidget {
   const GymVerificationSetupScreen({super.key});
   @override
@@ -3029,12 +3041,7 @@ class _GymVerificationSetupScreenState
     setState(() => _pickingFile = true);
     try {
       final file = await openFile(
-        acceptedTypeGroups: [
-          XTypeGroup(
-            label: 'Verification documents',
-            extensions: ['pdf', 'jpg', 'jpeg', 'png'],
-          ),
-        ],
+        acceptedTypeGroups: [verificationDocumentTypeGroup],
       );
       if (!mounted) return;
       if (file != null) {
@@ -3047,7 +3054,10 @@ class _GymVerificationSetupScreenState
     } on PlatformException {
       if (mounted)
         setState(() => _error = 'Photo access is unavailable right now.');
-    } catch (_) {
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Verification document picker failed: ${error.runtimeType}');
+      }
       if (mounted)
         setState(
           () => _error = 'We couldn’t choose that file. Please try again.',
