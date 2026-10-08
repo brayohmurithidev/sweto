@@ -5,6 +5,9 @@ Rules:
   Duplicates and late, older statuses are ignored, so webhooks can be
   retried or arrive out of order safely.
 - ``failed`` is final, and is ignored once the code was delivered.
+- A report that arrives before the challenge has stored the provider's
+  message ID is kept in otp_unmatched_delivery_reports and applied as soon
+  as the ID is stored (``apply_buffered``), so a fast "failed" isn't lost.
 - A delivery report never makes a code usable. The only change to the
   authentication state is that a failed delivery retires a still-pending
   challenge (status ``expired``): the code never reached the user, and this
@@ -14,9 +17,9 @@ Rules:
 
 import logging
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.integrations.whatsapp.webhook import WhatsAppStatusEvent
@@ -28,9 +31,12 @@ from app.modules.auth.enums import (
     OTPDeliveryStatus,
     OTPStatus,
 )
-from app.modules.auth.models import OTPChallenge
+from app.modules.auth.models import OTPChallenge, UnmatchedDeliveryReport
 
 logger = logging.getLogger(__name__)
+
+# Unmatched reports older than this belong to messages SWETO didn't send.
+_UNMATCHED_RETENTION = timedelta(days=1)
 
 _PROGRESS = {
     OTPDeliveryStatus.PENDING: 0,
@@ -63,12 +69,26 @@ class DeliveryStatusService:
         for event in events:
             challenge = await self._challenge_for(event.message_id)
             if challenge is None:
+                # Possibly faster than our own save of the message ID.
+                self.session.add(
+                    UnmatchedDeliveryReport(
+                        provider_message_id=event.message_id,
+                        status=event.status,
+                        error_code=event.error_code,
+                    )
+                )
                 result.unmatched += 1
                 continue
             if self._apply(challenge, event, now):
                 result.applied += 1
             else:
                 result.ignored += 1
+        if result.unmatched:
+            await self.session.execute(
+                delete(UnmatchedDeliveryReport).where(
+                    UnmatchedDeliveryReport.received_at < now - _UNMATCHED_RETENTION
+                )
+            )
         await self.session.commit()
         if result.unmatched or result.applied:
             logger.info(
@@ -78,6 +98,44 @@ class DeliveryStatusService:
                 result.unmatched,
             )
         return result
+
+    async def apply_buffered(self, challenge: OTPChallenge) -> int:
+        """Apply reports that arrived before the challenge stored its ID.
+
+        Call after setting ``provider_message_id``; the caller commits.
+        Returns how many buffered reports were found.
+        """
+
+        message_id = challenge.provider_message_id
+        if (
+            message_id is None
+            or challenge.delivery_channel is not OTPDeliveryChannel.WHATSAPP
+        ):
+            return 0
+        reports = (
+            (
+                await self.session.execute(
+                    select(UnmatchedDeliveryReport)
+                    .where(UnmatchedDeliveryReport.provider_message_id == message_id)
+                    .order_by(UnmatchedDeliveryReport.received_at)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        now = datetime.now(UTC)
+        for report in reports:
+            self._apply(
+                challenge,
+                WhatsAppStatusEvent(
+                    message_id=message_id,
+                    status=report.status,
+                    error_code=report.error_code,
+                ),
+                now,
+            )
+            await self.session.delete(report)
+        return len(reports)
 
     async def _challenge_for(self, message_id: str) -> OTPChallenge | None:
         statement = (

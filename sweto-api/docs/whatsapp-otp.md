@@ -23,8 +23,14 @@ bottom of this page pass.
 3. **Reports.** Meta later posts status reports (`sent`, `delivered`,
    `read`, `failed`) to the webhook. These update `delivery_status`.
 4. **Polling.** The app asks
-   `GET /api/v1/auth/otp-challenges/{id}/delivery` while it waits, so it
-   can tell the user quickly when WhatsApp could not deliver the code.
+   `GET /api/v1/auth/otp-challenges/{id}/delivery` while it waits (4 s,
+   then backing off to 30 s), so it can tell the user quickly when
+   WhatsApp could not deliver the code.
+   - The endpoint shows no phone number and nothing about whether the
+     code is valid.
+   - It is rate limited per IP (`OTP_DELIVERY_STATUS_IP_LIMIT`, default
+     120 per 15 minutes).
+   - It answers 404 once the code has expired.
 
 ### Delivery state and authentication state are separate
 
@@ -59,7 +65,10 @@ error):
 
 **One usable code per number.** A partial unique index allows only one
 `pending` challenge per number and purpose. If two requests race, the
-loser gets the normal resend-cooldown response.
+loser gets the normal resend-cooldown response with the real remaining
+time, plus an `otp_request_blocked` audit event (`concurrent_request`).
+If saving the provider's acceptance fails after a successful send, the
+request still succeeds; only delivery tracking for that message is lost.
 
 ### Meta error handling
 
@@ -161,10 +170,11 @@ in the setup steps below (subscribing the app, creating the template).
     to 7 days, and retries are harmless.
 - **Logging:** bodies, phone numbers, codes and secrets are never logged;
   only counts are.
-- **Known gap:** a status report that reaches us before the send response
-  has been saved finds no challenge and is ignored. The window is a few
-  milliseconds. If it ever matters in practice, keep unmatched reports
-  for a short while and replay them.
+- **Early reports:** a report can reach us before the send response has
+  been saved. Such reports are kept in `otp_unmatched_delivery_reports`
+  and applied as soon as the challenge stores its message ID, so a fast
+  `failed` is not lost. Rows older than a day are purged (they belong to
+  messages SWETO didn't send).
 
 ## Countries offered to the app
 

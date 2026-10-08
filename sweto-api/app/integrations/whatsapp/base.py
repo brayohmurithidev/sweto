@@ -23,8 +23,9 @@ class WhatsAppOTPProvider(OTPSender, Protocol):
       WhatsApp, so don't add one. Return normally when the API accepts the
       message; raise WhatsAppDeliveryError when it refuses the request,
       times out or is unreachable.
-    - Acceptance is not delivery. A number that isn't on WhatsApp fails
-      later, through the message status webhook (error 131026). Handling that
-      webhook is separate work and is not part of this method.
+    - Return the provider's message ID (Meta's "wamid"). Acceptance is not
+      delivery: a number that isn't on WhatsApp fails later, through the
+      message status webhook (error 131026), which
+      app/modules/auth/whatsapp_webhook_router.py applies to the challenge.
     - Never log the code, the access token or the recipient's full number.
     """

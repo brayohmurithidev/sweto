@@ -2,12 +2,13 @@ import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.integrations.delivery import OTPDeliveryError
 from app.modules.auth.audit import AuthAuditLogger
+from app.modules.auth.delivery_status import DeliveryStatusService
 from app.modules.auth.enums import (
     AuthEventOutcome,
     AuthEventType,
@@ -86,6 +87,9 @@ from app.rate_limit.base import RateLimiter
 logger = logging.getLogger(__name__)
 
 _DUMMY_PASSWORD_HASH = hash_password("invalid-password-login-placeholder")
+
+# Partial unique index: one pending challenge per phone number and purpose.
+_ONE_PENDING_INDEX = "uq_otp_challenges_one_pending"
 
 
 class AuthenticationService:
@@ -473,11 +477,15 @@ class AuthenticationService:
         try:
             await self.session.flush()
         except IntegrityError as exc:
+            await self.session.rollback()
+            if _ONE_PENDING_INDEX not in str(exc.orig):
+                raise
             # Another request for this number created a pending challenge
             # between our check and insert (one pending code per number).
-            await self.session.rollback()
-            raise OTPResendCooldownError(
-                retry_after_seconds=self.settings.otp_resend_cooldown_seconds
+            raise await self._concurrent_request_blocked(
+                phone_number=phone_number,
+                requested_ip=requested_ip,
+                user_agent=user_agent,
             ) from exc
 
         self.audit_logger.record(
@@ -513,15 +521,8 @@ class AuthenticationService:
             )
             raise OTPDeliveryFailedError(channel=channel, retryable=retryable) from exc
 
-        # Accepted by the provider. Whether it arrived is reported later
-        # (WhatsApp status webhook); acceptance is not delivery.
-        challenge.provider_message_id = provider_message_id
-        challenge.delivery_status = OTPDeliveryStatus.ACCEPTED
-        challenge.delivery_status_updated_at = datetime.now(UTC)
-        await self.session.commit()
-
-        return RequestOTPData(
-            challenge_id=str(challenge.id),
+        data = RequestOTPData(
+            challenge_id=challenge.id,
             phone_number=challenge.phone_number,
             expires_at=challenge.expires_at,
             resend_available_at=resend_available_at,
@@ -529,15 +530,92 @@ class AuthenticationService:
             delivery_channel=channel,
         )
 
-    async def get_otp_delivery(self, *, challenge_id: UUID) -> OTPDeliveryData:
+        # Accepted by the provider. Whether it arrived is reported later
+        # (WhatsApp status webhook); acceptance is not delivery.
+        challenge.provider_message_id = provider_message_id
+        challenge.delivery_status = OTPDeliveryStatus.ACCEPTED
+        challenge.delivery_status_updated_at = datetime.now(UTC)
+        try:
+            # A report may have beaten us here; apply it now.
+            await DeliveryStatusService(self.session).apply_buffered(challenge)
+            await self.session.commit()
+        except SQLAlchemyError:
+            # The code was sent, so the request still succeeds; only delivery
+            # tracking for this message is lost.
+            await self.session.rollback()
+            logger.warning(
+                "Could not record provider acceptance for challenge %s",
+                data.challenge_id,
+            )
+
+        return data
+
+    async def _concurrent_request_blocked(
+        self,
+        *,
+        phone_number: str,
+        requested_ip: str | None,
+        user_agent: str | None,
+    ) -> OTPResendCooldownError:
+        """Treat a lost race for the one pending code like the resend cooldown."""
+
+        latest = await self.otp_repository.get_latest_pending(
+            phone_number=phone_number,
+            purpose=OTPPurpose.LOGIN,
+        )
+        retry_after_seconds = self.settings.otp_resend_cooldown_seconds
+        if latest is not None:
+            available_at = latest.created_at + timedelta(
+                seconds=self.settings.otp_resend_cooldown_seconds
+            )
+            retry_after_seconds = max(
+                1, int((available_at - datetime.now(UTC)).total_seconds())
+            )
+        self.audit_logger.record(
+            event_type=AuthEventType.OTP_REQUEST_BLOCKED,
+            outcome=AuthEventOutcome.BLOCKED,
+            challenge_id=latest.id if latest is not None else None,
+            phone_number=phone_number,
+            ip_address=requested_ip,
+            user_agent=user_agent,
+            metadata={
+                "reason": "concurrent_request",
+                "retry_after_seconds": retry_after_seconds,
+            },
+        )
+        await self.session.commit()
+        return OTPResendCooldownError(retry_after_seconds=retry_after_seconds)
+
+    async def get_otp_delivery(
+        self, *, challenge_id: UUID, ip_address: str | None
+    ) -> OTPDeliveryData:
         """Return where a sign-in code is on its way to the user.
 
         Lets the app tell the user quickly when WhatsApp could not deliver
-        the code. Reveals no phone number and nothing about code validity.
+        the code. Reveals no phone number and nothing about code validity,
+        is rate limited per IP, and stops answering once the code expired.
         """
 
+        if ip_address is not None:
+            limit = await self.rate_limiter.consume(
+                key=f"otp-delivery:ip:{ip_address}",
+                limit=self.settings.otp_delivery_status_ip_limit,
+                window_seconds=self.settings.otp_delivery_status_ip_window_seconds,
+            )
+            if not limit.allowed:
+                raise AuthenticationRateLimitError(
+                    code="OTP_DELIVERY_STATUS_RATE_LIMITED",
+                    message="Too many delivery checks. Please wait a moment.",
+                    retry_after_seconds=limit.retry_after_seconds,
+                    limit=limit.limit,
+                )
+
         challenge = await self.otp_repository.get_by_id(challenge_id=challenge_id)
-        if challenge is None or challenge.purpose is not OTPPurpose.LOGIN:
+        if (
+            challenge is None
+            or challenge.purpose is not OTPPurpose.LOGIN
+            or challenge.expires_at < datetime.now(UTC)
+        ):
             raise OTPChallengeNotFoundError("The verification challenge was not found.")
         return OTPDeliveryData(
             challenge_id=challenge.id,

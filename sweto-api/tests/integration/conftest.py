@@ -99,6 +99,10 @@ class RecordingSMSProvider:
         """Provider message ID of the last send, like a WhatsApp wamid."""
         return f"wamid.test-{id(self)}-{len(self.sent)}"
 
+    def next_message_id(self) -> str:
+        """Provider message ID the next successful send will return."""
+        return f"wamid.test-{id(self)}-{len(self.sent) + 1}"
+
     def last_code(self) -> str:
         return self.sent[-1][1]
 

@@ -411,3 +411,133 @@ async def test_database_allows_only_one_pending_code_per_number(
             "now() + interval '5 minutes', 5, 0)",
             phone=UGANDA,
         )
+
+
+# --- Review follow-ups -------------------------------------------------------
+
+
+async def test_a_report_that_beats_the_saved_message_id_is_applied(
+    api: IntegrationAPI,
+) -> None:
+    early = {
+        "id": api.whatsapp.next_message_id(),
+        "status": "failed",
+        "errors": [{"code": 131026}],
+    }
+    assert await post_statuses(api, early) == 200
+    assert await api.sql("SELECT count(*) FROM otp_unmatched_delivery_reports") == [
+        (1,)
+    ]
+
+    data = await request_code(api)
+
+    assert await challenge_state(api, data["challenge_id"]) == (
+        "expired",
+        "failed",
+        "131026",
+    )
+    assert await delivery(api, data["challenge_id"]) == "failed"
+    assert await api.sql("SELECT count(*) FROM otp_unmatched_delivery_reports") == [
+        (0,)
+    ]
+    # The user can ask for a new code straight away.
+    await request_code(api)
+
+
+async def test_old_unmatched_reports_are_purged(api: IntegrationAPI) -> None:
+    await api.sql(
+        "INSERT INTO otp_unmatched_delivery_reports "
+        "(id, provider_message_id, status, received_at) "
+        "VALUES (gen_random_uuid(), 'wamid.old', 'sent', now() - interval '2 days')"
+    )
+
+    assert await post_statuses(api, {"id": "wamid.other", "status": "sent"}) == 200
+
+    rows = await api.sql(
+        "SELECT provider_message_id FROM otp_unmatched_delivery_reports"
+    )
+    assert rows == [("wamid.other",)]
+
+
+async def test_send_succeeds_even_if_tracking_cannot_be_saved(
+    api: IntegrationAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from app.modules.auth.delivery_status import DeliveryStatusService
+
+    async def broken(self: object, challenge: object) -> int:
+        raise SQLAlchemyError("database went away")
+
+    monkeypatch.setattr(DeliveryStatusService, "apply_buffered", broken)
+
+    data = await request_code(api)
+
+    assert data["delivery_channel"] == "whatsapp"
+    assert (await challenge_state(api, data["challenge_id"]))[0] == "pending"
+
+
+async def test_a_lost_race_for_the_pending_code_is_a_normal_cooldown(
+    api: IntegrationAPI, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from app.modules.auth.repository import OTPChallengeRepository
+
+    await request_code(api)
+    original = OTPChallengeRepository.get_latest_pending
+    calls = {"count": 0}
+
+    async def first_check_misses(self: OTPChallengeRepository, **kwargs: object):
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return None  # as if the other request hadn't committed yet
+        return await original(self, **kwargs)  # type: ignore[arg-type]
+
+    async def no_expiry(self: OTPChallengeRepository, **kwargs: object) -> None:
+        return None
+
+    monkeypatch.setattr(
+        OTPChallengeRepository, "get_latest_pending", first_check_misses
+    )
+    monkeypatch.setattr(OTPChallengeRepository, "expire_pending_challenges", no_expiry)
+
+    response = await api.client.post(
+        "/api/v1/auth/request-otp", json={"phone_number": UGANDA}
+    )
+
+    assert response.status_code == 429
+    assert 0 < response.json()["error"]["details"]["retry_after_seconds"] <= 60
+    assert len(api.whatsapp.sent) == 1
+    events = await api.sql(
+        "SELECT metadata->>'reason' FROM auth_events "
+        "WHERE event_type = 'otp_request_blocked'"
+    )
+    assert events == [("concurrent_request",)]
+
+
+async def test_delivery_checks_are_rate_limited(api: IntegrationAPI) -> None:
+    data = await request_code(api)
+    limited = app.dependency_overrides[get_settings]().model_copy(
+        update={"otp_delivery_status_ip_limit": 2}
+    )
+    app.dependency_overrides[get_settings] = lambda: limited
+    url = f"/api/v1/auth/otp-challenges/{data['challenge_id']}/delivery"
+
+    codes = [(await api.client.get(url)).status_code for _ in range(3)]
+
+    assert codes == [200, 200, 429]
+
+
+async def test_delivery_status_closes_once_the_code_expired(
+    api: IntegrationAPI,
+) -> None:
+    data = await request_code(api)
+    await api.sql(
+        "UPDATE otp_challenges SET expires_at = now() - interval '1 second' "
+        "WHERE id = :id",
+        id=data["challenge_id"],
+    )
+
+    response = await api.client.get(
+        f"/api/v1/auth/otp-challenges/{data['challenge_id']}/delivery"
+    )
+    assert response.status_code == 404

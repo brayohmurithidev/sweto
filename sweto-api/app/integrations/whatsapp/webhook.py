@@ -30,7 +30,9 @@ def signature_is_valid(*, body: bytes, header: str | None, app_secret: str) -> b
     if not header or not header.startswith("sha256="):
         return False
     expected = hmac.new(app_secret.encode(), body, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(expected, header.removeprefix("sha256="))
+    # Compare bytes: a non-ASCII header must fail the check, not raise.
+    received = header.removeprefix("sha256=").encode("utf-8", "replace")
+    return hmac.compare_digest(expected.encode(), received)
 
 
 def parse_status_events(

@@ -478,3 +478,41 @@ class AuthEvent(
         nullable=False,
         server_default=func.now(),
     )
+
+
+class UnmatchedDeliveryReport(
+    UUIDPrimaryKeyMixin,
+    Base,
+):
+    """A provider status report that arrived before its challenge was saved.
+
+    Meta can report a status within milliseconds of accepting a message,
+    sometimes before SWETO has stored the message ID. Such reports wait here
+    and are applied as soon as the challenge records the ID. Rows older than
+    a day are removed (they belong to messages SWETO didn't send).
+    """
+
+    __tablename__ = "otp_unmatched_delivery_reports"
+
+    provider_message_id: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+        index=True,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+    )
+
+    error_code: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+    )
+
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        index=True,
+    )

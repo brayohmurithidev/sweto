@@ -76,6 +76,10 @@ class Settings(BaseSettings):
     otp_verify_ip_limit: int = 30
     otp_verify_ip_window_seconds: int = 900
 
+    # The app polls delivery while it waits for a WhatsApp code.
+    otp_delivery_status_ip_limit: int = 120
+    otp_delivery_status_ip_window_seconds: int = 900
+
     password_login_email_limit: int = 5
     password_login_email_window_seconds: int = 900
     password_login_ip_limit: int = 20

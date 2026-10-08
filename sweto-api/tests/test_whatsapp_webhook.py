@@ -52,6 +52,7 @@ def test_invalid_missing_or_malformed_signatures_are_rejected() -> None:
         sign(body + b" "),  # body changed after signing
         sign(body).removeprefix("sha256="),  # no prefix
         "sha1=" + hashlib.sha1(body).hexdigest(),
+        "sha256=é" + "0" * 63,  # non-ASCII must fail, not raise
     ):
         assert not signature_is_valid(body=body, header=header, app_secret=SECRET)
 

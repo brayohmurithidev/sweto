@@ -122,6 +122,7 @@ async def phone_countries(
 )
 async def otp_delivery_status(
     challenge_id: UUID,
+    request: Request,
     session: DatabaseSession,
     settings: ApplicationSettings,
     otp_delivery: ConfiguredOTPDelivery,
@@ -135,7 +136,11 @@ async def otp_delivery_status(
         otp_delivery=otp_delivery,
         rate_limiter=rate_limiter,
     )
-    return APIResponse(data=await service.get_otp_delivery(challenge_id=challenge_id))
+    data = await service.get_otp_delivery(
+        challenge_id=challenge_id,
+        ip_address=request.client.host if request.client else None,
+    )
+    return APIResponse(data=data)
 
 
 @router.post(
