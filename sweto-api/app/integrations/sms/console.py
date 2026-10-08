@@ -12,10 +12,11 @@ class ConsoleSMSProvider:
         phone_number: str,
         otp_code: str,
         expires_in_seconds: int,
-    ) -> None:
+    ) -> str | None:
         logger.warning(
             "SWETO DEVELOPMENT OTP | phone=%s code=%s expires_in=%ss",
             phone_number,
             otp_code,
             expires_in_seconds,
         )
+        return None

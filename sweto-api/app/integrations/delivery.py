@@ -16,11 +16,21 @@ class OTPDeliveryError(Exception):
     unreachable or answered with a response that could not be understood.
     ``reason`` is a short, stable category such as ``provider_rejected``. It
     must never contain the OTP or any credential, because callers log it.
+    ``provider_code`` is the provider's own error code (for example Meta's
+    ``131026``), kept for the audit log; never put provider messages here,
+    because they can contain the recipient's number.
     """
 
-    def __init__(self, reason: str, *, retryable: bool = True) -> None:
+    def __init__(
+        self,
+        reason: str,
+        *,
+        retryable: bool = True,
+        provider_code: str | None = None,
+    ) -> None:
         self.reason = reason
         self.retryable = retryable
+        self.provider_code = provider_code
         super().__init__(reason)
 
 
@@ -28,9 +38,11 @@ class OTPSender(Protocol):
     """Sends an authentication code to one E.164 phone number.
 
     Contract:
-    - Return normally only when the provider has accepted the message.
-      Acceptance is not proof of delivery; channels that report delivery
-      later (WhatsApp) do so through their own callbacks.
+    - Return normally only when the provider has accepted the message, with
+      the provider's message ID when it has one (used to match delivery
+      reports to the challenge), otherwise None. Acceptance is not proof of
+      delivery; channels that report delivery later (WhatsApp) do so through
+      their own callbacks.
     - Raise OTPDeliveryError for any failure; never return silently on error.
     - Never log the OTP code or provider credentials.
     - Respect cancellation: the caller enforces an overall timeout.
@@ -42,6 +54,6 @@ class OTPSender(Protocol):
         phone_number: str,
         otp_code: str,
         expires_in_seconds: int,
-    ) -> None:
+    ) -> str | None:
         """Send an authentication OTP to an E.164 phone number."""
         ...

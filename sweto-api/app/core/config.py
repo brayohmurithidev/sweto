@@ -1,8 +1,9 @@
+import re
 from functools import lru_cache
 from typing import Literal
 
 import phonenumbers
-from pydantic import Field, PostgresDsn, model_validator
+from pydantic import Field, PostgresDsn, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,8 +40,19 @@ class Settings(BaseSettings):
     )
     otp_sms_regions: list[str] = Field(default_factory=lambda: ["KE"])
 
-    whatsapp_provider: Literal["disabled", "console"] = "disabled"
+    whatsapp_provider: Literal["disabled", "console", "meta"] = "disabled"
     whatsapp_send_timeout_seconds: float = Field(default=10, gt=0, le=30)
+
+    # Meta WhatsApp Cloud API (WHATSAPP_PROVIDER=meta). Values come from the
+    # environment only; none has a default except the public Graph host.
+    meta_graph_api_base_url: str = "https://graph.facebook.com"
+    meta_graph_api_version: str | None = None
+    meta_whatsapp_phone_number_id: str | None = None
+    meta_whatsapp_access_token: SecretStr | None = None
+    meta_whatsapp_otp_template_name: str | None = None
+    meta_whatsapp_otp_template_language: str | None = None
+    meta_app_secret: SecretStr | None = None
+    meta_webhook_verify_token: SecretStr | None = None
 
     jwt_secret_key: str
     jwt_algorithm: Literal["HS256"] = "HS256"
@@ -122,6 +134,46 @@ class Settings(BaseSettings):
                 "OTP_SMS_REGIONS must be a subset of OTP_SUPPORTED_REGIONS; "
                 f"not supported: {', '.join(outside)}."
             )
+        return self
+
+    @model_validator(mode="after")
+    def validate_meta_whatsapp(self) -> "Settings":
+        if self.whatsapp_provider != "meta":
+            return self
+        required = {
+            "META_GRAPH_API_VERSION": self.meta_graph_api_version,
+            "META_WHATSAPP_PHONE_NUMBER_ID": self.meta_whatsapp_phone_number_id,
+            "META_WHATSAPP_ACCESS_TOKEN": self.meta_whatsapp_access_token,
+            "META_WHATSAPP_OTP_TEMPLATE_NAME": self.meta_whatsapp_otp_template_name,
+            "META_WHATSAPP_OTP_TEMPLATE_LANGUAGE": (
+                self.meta_whatsapp_otp_template_language
+            ),
+            "META_APP_SECRET": self.meta_app_secret,
+            "META_WEBHOOK_VERIFY_TOKEN": self.meta_webhook_verify_token,
+        }
+        missing = [
+            name
+            for name, value in required.items()
+            if value is None
+            or not (
+                value.get_secret_value() if isinstance(value, SecretStr) else value
+            ).strip()
+        ]
+        if missing:
+            raise ValueError(
+                "WHATSAPP_PROVIDER=meta needs these settings: " + ", ".join(missing)
+            )
+        if not re.fullmatch(r"v\d+\.\d+", self.meta_graph_api_version or ""):
+            raise ValueError("META_GRAPH_API_VERSION must look like v24.0.")
+        if not (self.meta_whatsapp_phone_number_id or "").isdigit():
+            raise ValueError("META_WHATSAPP_PHONE_NUMBER_ID must be numeric.")
+        if not re.fullmatch(r"[a-z0-9_]+", self.meta_whatsapp_otp_template_name or ""):
+            raise ValueError(
+                "META_WHATSAPP_OTP_TEMPLATE_NAME uses lowercase letters, digits "
+                "and underscores only."
+            )
+        if not self.meta_graph_api_base_url.startswith("https://"):
+            raise ValueError("META_GRAPH_API_BASE_URL must use https.")
         return self
 
     @model_validator(mode="after")

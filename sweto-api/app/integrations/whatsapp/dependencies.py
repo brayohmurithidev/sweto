@@ -3,6 +3,7 @@ from functools import lru_cache
 from app.core.config import get_settings
 from app.integrations.whatsapp.base import WhatsAppOTPProvider
 from app.integrations.whatsapp.console import ConsoleWhatsAppProvider
+from app.integrations.whatsapp.meta import MetaWhatsAppConfig, MetaWhatsAppProvider
 
 
 @lru_cache
@@ -19,5 +20,7 @@ def get_whatsapp_provider() -> WhatsAppOTPProvider | None:
         return None
     if settings.whatsapp_provider == "console":
         return ConsoleWhatsAppProvider()
+    if settings.whatsapp_provider == "meta":
+        return MetaWhatsAppProvider(MetaWhatsAppConfig.from_settings(settings))
 
     raise RuntimeError(f"Unsupported WhatsApp provider: {settings.whatsapp_provider}")
