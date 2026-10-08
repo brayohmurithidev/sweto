@@ -31,6 +31,12 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
   late final FocusNode _phoneFocusNode;
 
   PhoneCountry _country = kenya;
+
+  /// Countries offered in the picker. Starts with Kenya only and grows to
+  /// what the API says can sign in now, so a switched-off channel (such as
+  /// WhatsApp before launch) is never offered.
+  List<PhoneCountry> _countries = const [kenya];
+  Map<String, OtpDeliveryChannel> _channels = const {};
   bool _hasInteracted = false;
   bool _isSubmitting = false;
   String? _submissionError;
@@ -57,6 +63,29 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
 
     _phoneController = TextEditingController();
     _phoneFocusNode = FocusNode();
+    _loadSignInCountries();
+  }
+
+  Future<void> _loadSignInCountries() async {
+    try {
+      final available = await ref
+          .read(otpDeliveryRepositoryProvider)
+          .getSignInCountries();
+      final channels = {
+        for (final country in available) country.isoCode: country.channel,
+      };
+      final countries = supportedPhoneCountries
+          .where((country) => channels.containsKey(country.isoCode))
+          .toList(growable: false);
+      if (!mounted || countries.isEmpty) return;
+      setState(() {
+        _countries = countries;
+        _channels = channels;
+        if (!countries.contains(_country)) _country = countries.first;
+      });
+    } catch (_) {
+      // Keep Kenya only: SMS sign-in works without this list.
+    }
   }
 
   void _onPhoneChanged(String value) {
@@ -210,6 +239,7 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
 
                         PhoneNumberField(
                           country: _country,
+                          countries: _countries,
                           onCountryChanged: _onCountryChanged,
                           controller: _phoneController,
                           focusNode: _phoneFocusNode,
@@ -220,7 +250,11 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
 
                         const SizedBox(height: AppSpacing.xs),
 
-                        _OtpChannelHint(channel: expectedOtpChannel(_country)),
+                        _OtpChannelHint(
+                          channel:
+                              _channels[_country.isoCode] ??
+                              expectedOtpChannel(_country),
+                        ),
 
                         if (_submissionError != null) ...[
                           const SizedBox(height: AppSpacing.sm),

@@ -10,7 +10,95 @@ import 'package:sweto_app/features/auth/domain/repositories/auth_repository.dart
 import 'package:sweto_app/features/auth/presentation/auth_providers.dart';
 import 'package:sweto_app/features/auth/presentation/otp_verification_screen.dart';
 
+import 'support/fake_otp_delivery_repository.dart';
+
 void main() {
+  Future<FakeOtpDeliveryRepository> pumpWhatsAppOtp(
+    WidgetTester tester,
+    OtpDeliveryStatus status,
+  ) async {
+    final delivery = FakeOtpDeliveryRepository(status: status);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_AuthFake()),
+          otpDeliveryRepositoryProvider.overrideWithValue(delivery),
+        ],
+        child: MaterialApp(
+          home: OtpVerificationScreen(
+            challenge: OtpChallenge(
+              challengeId: 'whatsapp-challenge',
+              phoneNumber: '+256701234567',
+              expiresAt: DateTime.now().add(const Duration(minutes: 5)),
+              resendAvailableAt: DateTime.now().add(const Duration(minutes: 1)),
+              deliveryChannel: OtpDeliveryChannel.whatsapp,
+            ),
+          ),
+        ),
+      ),
+    );
+    return delivery;
+  }
+
+  testWidgets('a failed WhatsApp delivery is explained and resend opens', (
+    tester,
+  ) async {
+    final delivery = await pumpWhatsAppOtp(tester, OtpDeliveryStatus.failed);
+    expect(find.byKey(const Key('otp-delivery-failed')), findsNothing);
+    expect(find.text('Resend code'), findsNothing);
+
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump();
+
+    expect(delivery.checkedChallengeIds, ['whatsapp-challenge']);
+    expect(find.byKey(const Key('otp-delivery-failed')), findsOneWidget);
+    expect(find.text('Resend code'), findsOneWidget);
+
+    // A final answer stops the checks.
+    await tester.pump(const Duration(seconds: 8));
+    expect(delivery.checkedChallengeIds, hasLength(1));
+  });
+
+  testWidgets('a delivered WhatsApp code shows no warning', (tester) async {
+    final delivery = await pumpWhatsAppOtp(
+      tester,
+      OtpDeliveryStatus.delivered,
+    );
+
+    await tester.pump(const Duration(seconds: 4));
+    await tester.pump();
+
+    expect(delivery.checkedChallengeIds, hasLength(1));
+    expect(find.byKey(const Key('otp-delivery-failed')), findsNothing);
+    expect(find.text('Resend code'), findsNothing);
+  });
+
+  testWidgets('SMS codes are not checked for delivery', (tester) async {
+    final delivery = FakeOtpDeliveryRepository();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(_AuthFake()),
+          otpDeliveryRepositoryProvider.overrideWithValue(delivery),
+        ],
+        child: MaterialApp(
+          home: OtpVerificationScreen(
+            challenge: OtpChallenge(
+              challengeId: 'sms-challenge',
+              phoneNumber: '+254712345678',
+              expiresAt: DateTime.now().add(const Duration(minutes: 5)),
+              resendAvailableAt: DateTime.now().add(const Duration(minutes: 1)),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump(const Duration(seconds: 8));
+
+    expect(delivery.checkedChallengeIds, isEmpty);
+  });
+
   for (final (channel, title) in [
     (OtpDeliveryChannel.sms, 'Check your SMS'),
     (OtpDeliveryChannel.whatsapp, 'Check WhatsApp'),
@@ -20,7 +108,12 @@ void main() {
     ) async {
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [authRepositoryProvider.overrideWithValue(_AuthFake())],
+          overrides: [
+            authRepositoryProvider.overrideWithValue(_AuthFake()),
+            otpDeliveryRepositoryProvider.overrideWithValue(
+              FakeOtpDeliveryRepository(),
+            ),
+          ],
           child: MaterialApp(
             home: OtpVerificationScreen(
               challenge: OtpChallenge(

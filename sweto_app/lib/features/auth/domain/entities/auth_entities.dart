@@ -9,6 +9,38 @@ enum OtpDeliveryChannel {
       value == 'whatsapp' ? whatsapp : sms;
 }
 
+/// Where a sign-in code is on its way, as reported by the provider.
+///
+/// Says nothing about whether the code can still be used.
+enum OtpDeliveryStatus {
+  pending,
+  accepted,
+  sent,
+  delivered,
+  read,
+  failed;
+
+  static OtpDeliveryStatus fromApi(Object? value) => switch (value) {
+    'accepted' => accepted,
+    'sent' => sent,
+    'delivered' => delivered,
+    'read' => read,
+    'failed' => failed,
+    _ => pending,
+  };
+
+  /// No further reports will change what the user should do.
+  bool get isFinal => this == delivered || this == read || this == failed;
+}
+
+/// A country whose numbers can sign in now, with the channel its codes use.
+class SignInCountry {
+  const SignInCountry({required this.isoCode, required this.channel});
+
+  final String isoCode;
+  final OtpDeliveryChannel channel;
+}
+
 class OtpChallenge {
   const OtpChallenge({
     required this.challengeId,

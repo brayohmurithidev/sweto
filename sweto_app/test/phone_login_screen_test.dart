@@ -8,13 +8,22 @@ import 'package:sweto_app/features/auth/presentation/auth_providers.dart';
 import 'package:sweto_app/features/auth/presentation/phone_login_screen.dart';
 
 import 'support/fake_auth_repository.dart';
+import 'support/fake_otp_delivery_repository.dart';
 
 void main() {
   late FakeAuthRepository auth;
   OtpChallenge? openedChallenge;
 
-  Future<void> pumpLogin(WidgetTester tester) async {
+  Future<void> pumpLogin(
+    WidgetTester tester, {
+    FakeOtpDeliveryRepository? delivery,
+  }) async {
     auth = FakeAuthRepository();
+    final otpDelivery =
+        delivery ??
+        FakeOtpDeliveryRepository(
+          countries: FakeOtpDeliveryRepository.withWhatsApp,
+        );
     openedChallenge = null;
     final router = GoRouter(
       routes: [
@@ -32,11 +41,15 @@ void main() {
     addTearDown(router.dispose);
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [authRepositoryProvider.overrideWithValue(auth)],
+        overrides: [
+          authRepositoryProvider.overrideWithValue(auth),
+          otpDeliveryRepositoryProvider.overrideWithValue(otpDelivery),
+        ],
         child: MaterialApp.router(routerConfig: router),
       ),
     );
-    await tester.pump();
+    // Lets the sign-in country list load.
+    await tester.pumpAndSettle();
   }
 
   Future<void> chooseCountry(WidgetTester tester, String isoCode) async {
@@ -152,5 +165,38 @@ void main() {
 
     expect(phoneField(tester).controller!.text, '701 234 567');
     expect(find.text('Enter a valid mobile number for Uganda.'), findsNothing);
+  });
+
+  testWidgets('only Kenya is offered while WhatsApp is switched off', (
+    tester,
+  ) async {
+    await pumpLogin(tester, delivery: FakeOtpDeliveryRepository());
+
+    expect(dialCode(tester).data, '+254');
+    expect(find.text('Code will be sent by SMS'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('phone-country-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Select country'), findsNothing);
+  });
+
+  testWidgets('Kenya sign-in still works if the country list fails', (
+    tester,
+  ) async {
+    final offline = FakeOtpDeliveryRepository()
+      ..countriesError = Exception('offline');
+    await pumpLogin(tester, delivery: offline);
+
+    await tester.tap(find.byKey(const Key('phone-country-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Select country'), findsNothing);
+
+    await tester.enterText(
+      find.byKey(const Key('phone-number-field')),
+      '0712345678',
+    );
+    await tester.pump();
+    await tester.tap(find.byKey(const Key('send-code-button')));
+    await tester.pumpAndSettle();
+    expect(auth.requestedPhoneNumbers, ['+254712345678']);
   });
 }

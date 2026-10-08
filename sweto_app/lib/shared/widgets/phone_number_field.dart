@@ -87,7 +87,10 @@ class PhoneNumberField extends StatelessWidget {
         prefixIconConstraints: const BoxConstraints(minWidth: 104),
         prefixIcon: _CountryButton(
           country: country,
-          onPressed: enabled ? () => _chooseCountry(context) : null,
+          canChoose: countries.length > 1,
+          onPressed: enabled && countries.length > 1
+              ? () => _chooseCountry(context)
+              : null,
         ),
         contentPadding: EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
@@ -124,9 +127,14 @@ class PhoneNumberField extends StatelessWidget {
 }
 
 class _CountryButton extends StatelessWidget {
-  const _CountryButton({required this.country, required this.onPressed});
+  const _CountryButton({
+    required this.country,
+    required this.canChoose,
+    required this.onPressed,
+  });
 
   final PhoneCountry country;
+  final bool canChoose;
   final VoidCallback? onPressed;
 
   @override
@@ -135,8 +143,10 @@ class _CountryButton extends StatelessWidget {
       button: true,
       enabled: onPressed != null,
       onTap: onPressed,
-      label: 'Country: ${country.name}, ${country.displayDialCode}. '
-          'Change country',
+      label: canChoose
+          ? 'Country: ${country.name}, ${country.displayDialCode}. '
+                'Change country'
+          : 'Country: ${country.name}, ${country.displayDialCode}',
       excludeSemantics: true,
       child: InkWell(
         key: const Key('phone-country-button'),
@@ -160,11 +170,14 @@ class _CountryButton extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                 ),
               ),
-              const Icon(
-                Icons.arrow_drop_down_rounded,
-                color: AppColors.textSecondary,
-                size: 20,
-              ),
+              if (canChoose)
+                const Icon(
+                  Icons.arrow_drop_down_rounded,
+                  color: AppColors.textSecondary,
+                  size: 20,
+                )
+              else
+                const SizedBox(width: AppSpacing.xs),
               const SizedBox(width: AppSpacing.xs),
               Container(width: 1, height: 24, color: AppColors.border),
             ],
