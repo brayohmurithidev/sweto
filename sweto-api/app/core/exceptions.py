@@ -603,6 +603,19 @@ async def gym_photo_error_handler(_: Request, exception: Exception) -> JSONRespo
     raise exception
 
 
+async def gym_day_pass_not_found_handler(
+    _: Request,
+    exception: Exception,
+) -> JSONResponse:
+    """Return a client error when pricing names an unknown day pass."""
+
+    return error_response(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        code="DAY_PASS_NOT_FOUND",
+        message=str(exception),
+    )
+
+
 async def gym_already_exists_handler(
     _: Request,
     exception: Exception,
