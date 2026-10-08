@@ -14,6 +14,7 @@ from app.core.exceptions import (
     current_session_revocation_handler,
     gym_access_denied_handler,
     gym_already_exists_handler,
+    gym_day_pass_not_found_handler,
     gym_not_found_handler,
     gym_photo_error_handler,
     gym_slug_conflict_handler,
@@ -82,6 +83,7 @@ from app.modules.gyms.exceptions import (
     AmenityNotFoundError,
     GymAccessDeniedError,
     GymAlreadyExistsError,
+    GymDayPassNotFoundError,
     GymNotFoundError,
     GymPhotoLimitReachedError,
     GymPhotoUploadInvalidError,
@@ -300,6 +302,9 @@ def create_application() -> FastAPI:
         gym_slug_conflict_handler,
     )
     application.add_exception_handler(StorageError, storage_error_handler)
+    application.add_exception_handler(
+        GymDayPassNotFoundError, gym_day_pass_not_found_handler
+    )
     for photo_exception in (GymPhotoLimitReachedError, GymPhotoUploadInvalidError):
         application.add_exception_handler(photo_exception, gym_photo_error_handler)
 
