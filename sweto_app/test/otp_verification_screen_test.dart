@@ -11,6 +11,37 @@ import 'package:sweto_app/features/auth/presentation/auth_providers.dart';
 import 'package:sweto_app/features/auth/presentation/otp_verification_screen.dart';
 
 void main() {
+  for (final (channel, title) in [
+    (OtpDeliveryChannel.sms, 'Check your SMS'),
+    (OtpDeliveryChannel.whatsapp, 'Check WhatsApp'),
+  ]) {
+    testWidgets('tells the user where to find a ${channel.name} code', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [authRepositoryProvider.overrideWithValue(_AuthFake())],
+          child: MaterialApp(
+            home: OtpVerificationScreen(
+              challenge: OtpChallenge(
+                challengeId: 'challenge',
+                phoneNumber: '+256701234567',
+                expiresAt: DateTime.now().add(const Duration(minutes: 5)),
+                resendAvailableAt: DateTime.now().add(
+                  const Duration(minutes: 1),
+                ),
+                deliveryChannel: channel,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text(title), findsOneWidget);
+      expect(find.text('+256701234567'), findsOneWidget);
+    });
+  }
+
   testWidgets('renders six responsive OTP boxes without overflow', (
     tester,
   ) async {

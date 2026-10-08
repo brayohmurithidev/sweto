@@ -1,15 +1,28 @@
+/// How the sign-in code reaches the user. The API decides per country
+/// (decision D-011): SMS in Kenya, WhatsApp in other supported countries.
+enum OtpDeliveryChannel {
+  sms,
+  whatsapp;
+
+  /// Parses the API's `delivery_channel`; older responses without it were SMS.
+  static OtpDeliveryChannel fromApi(Object? value) =>
+      value == 'whatsapp' ? whatsapp : sms;
+}
+
 class OtpChallenge {
   const OtpChallenge({
     required this.challengeId,
     required this.phoneNumber,
     required this.expiresAt,
     required this.resendAvailableAt,
+    this.deliveryChannel = OtpDeliveryChannel.sms,
   });
 
   final String challengeId;
   final String phoneNumber;
   final DateTime expiresAt;
   final DateTime resendAvailableAt;
+  final OtpDeliveryChannel deliveryChannel;
 }
 
 class AuthTokens {

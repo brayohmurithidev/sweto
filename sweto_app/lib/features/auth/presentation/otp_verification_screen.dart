@@ -226,7 +226,9 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 Text(
-                  'Check your SMS',
+                  _challenge.deliveryChannel == OtpDeliveryChannel.whatsapp
+                      ? 'Check WhatsApp'
+                      : 'Check your SMS',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.headingLarge.copyWith(
                     color: AppColors.white,
