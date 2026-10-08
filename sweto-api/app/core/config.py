@@ -1,6 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
+import phonenumbers
 from pydantic import Field, PostgresDsn, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -30,6 +31,16 @@ class Settings(BaseSettings):
 
     sms_provider: Literal["console"] = "console"
     sms_send_timeout_seconds: float = Field(default=10, gt=0, le=30)
+
+    # Countries (ISO 3166 alpha-2) whose numbers can sign in. Codes go by SMS
+    # in otp_sms_regions and by WhatsApp everywhere else (D-011).
+    otp_supported_regions: list[str] = Field(
+        default_factory=lambda: ["KE", "UG", "TZ", "RW", "BI", "SS", "CD", "SO"]
+    )
+    otp_sms_regions: list[str] = Field(default_factory=lambda: ["KE"])
+
+    whatsapp_provider: Literal["disabled", "console"] = "disabled"
+    whatsapp_send_timeout_seconds: float = Field(default=10, gt=0, le=30)
 
     jwt_secret_key: str
     jwt_algorithm: Literal["HS256"] = "HS256"
@@ -90,6 +101,38 @@ class Settings(BaseSettings):
         }:
             raise ValueError(
                 "SMS_PROVIDER=console logs verification codes and is only "
+                "allowed in local, development and testing environments."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_otp_regions(self) -> "Settings":
+        supported = set(self.otp_supported_regions)
+        unknown = sorted(
+            (supported | set(self.otp_sms_regions)) - phonenumbers.SUPPORTED_REGIONS
+        )
+        if unknown:
+            raise ValueError(
+                "OTP regions must be ISO 3166 alpha-2 codes in upper case; "
+                f"unknown: {', '.join(unknown)}."
+            )
+        outside = sorted(set(self.otp_sms_regions) - supported)
+        if outside:
+            raise ValueError(
+                "OTP_SMS_REGIONS must be a subset of OTP_SUPPORTED_REGIONS; "
+                f"not supported: {', '.join(outside)}."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def validate_whatsapp_provider(self) -> "Settings":
+        # Like the console SMS provider, this one writes codes to the logs.
+        if self.whatsapp_provider == "console" and self.app_environment in {
+            "staging",
+            "production",
+        }:
+            raise ValueError(
+                "WHATSAPP_PROVIDER=console logs verification codes and is only "
                 "allowed in local, development and testing environments."
             )
         return self

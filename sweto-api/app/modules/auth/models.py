@@ -25,6 +25,7 @@ from app.database.types import string_enum
 from app.modules.auth.enums import (
     AuthEventOutcome,
     AuthEventType,
+    OTPDeliveryChannel,
     OTPPurpose,
     OTPStatus,
     SessionStatus,
@@ -201,6 +202,16 @@ class OTPChallenge(
         nullable=False,
         default=OTPStatus.PENDING,
         server_default=OTPStatus.PENDING.value,
+    )
+
+    delivery_channel: Mapped[OTPDeliveryChannel] = mapped_column(
+        string_enum(
+            OTPDeliveryChannel,
+            name="otp_delivery_channel",
+        ),
+        nullable=False,
+        default=OTPDeliveryChannel.SMS,
+        server_default=OTPDeliveryChannel.SMS.value,
     )
 
     code_hash: Mapped[str] = mapped_column(

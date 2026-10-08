@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.modules.auth.enums import UserRole
+from app.modules.auth.enums import OTPDeliveryChannel, UserRole
 from app.modules.auth.security import normalize_email
 
 
@@ -25,6 +25,7 @@ class RequestOTPData(BaseModel):
     expires_at: datetime
     resend_available_at: datetime
     expires_in_seconds: int
+    delivery_channel: OTPDeliveryChannel
 
 
 class VerifyOTPRequest(BaseModel):

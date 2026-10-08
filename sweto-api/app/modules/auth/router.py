@@ -6,13 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.database.session import get_db_session
-from app.integrations.sms.base import SMSProvider
-from app.integrations.sms.dependencies import get_sms_provider
 from app.modules.auth.dependencies import (
     BaseAuthContext,
     BaseCurrentUser,
     CurrentAuthContext,
 )
+from app.modules.auth.otp_delivery import OTPDelivery, get_otp_delivery
 from app.modules.auth.schemas import (
     AuthenticatedUserData,
     ChangePasswordData,
@@ -51,9 +50,9 @@ ApplicationSettings = Annotated[
     Depends(get_settings),
 ]
 
-ConfiguredSMSProvider = Annotated[
-    SMSProvider,
-    Depends(get_sms_provider),
+ConfiguredOTPDelivery = Annotated[
+    OTPDelivery,
+    Depends(get_otp_delivery),
 ]
 
 ConfiguredRateLimiter = Annotated[
@@ -71,7 +70,7 @@ async def password_login(
     request: Request,
     session: DatabaseSession,
     settings: ApplicationSettings,
-    sms_provider: ConfiguredSMSProvider,
+    otp_delivery: ConfiguredOTPDelivery,
     rate_limiter: ConfiguredRateLimiter,
 ) -> APIResponse[PasswordLoginData]:
     """Authenticate an email/password account using standard sessions."""
@@ -79,7 +78,7 @@ async def password_login(
     service = AuthenticationService(
         session=session,
         settings=settings,
-        sms_provider=sms_provider,
+        otp_delivery=otp_delivery,
         rate_limiter=rate_limiter,
     )
     data = await service.password_login(
@@ -100,7 +99,7 @@ async def request_otp(
     request: Request,
     session: DatabaseSession,
     settings: ApplicationSettings,
-    sms_provider: ConfiguredSMSProvider,
+    otp_delivery: ConfiguredOTPDelivery,
     rate_limiter: ConfiguredRateLimiter,
 ) -> APIResponse[RequestOTPData]:
     """Send a login OTP to a normalized phone number."""
@@ -108,7 +107,7 @@ async def request_otp(
     service = AuthenticationService(
         session=session,
         settings=settings,
-        sms_provider=sms_provider,
+        otp_delivery=otp_delivery,
         rate_limiter=rate_limiter,
     )
 
@@ -130,7 +129,7 @@ async def verify_otp(
     request: Request,
     session: DatabaseSession,
     settings: ApplicationSettings,
-    sms_provider: ConfiguredSMSProvider,
+    otp_delivery: ConfiguredOTPDelivery,
     rate_limiter: ConfiguredRateLimiter,
 ) -> APIResponse[VerifyOTPData]:
     """Verify a login OTP and issue authentication tokens."""
@@ -138,7 +137,7 @@ async def verify_otp(
     service = AuthenticationService(
         session=session,
         settings=settings,
-        sms_provider=sms_provider,
+        otp_delivery=otp_delivery,
         rate_limiter=rate_limiter,
     )
 
@@ -183,7 +182,7 @@ async def change_password(
     auth_context: BaseAuthContext,
     session: DatabaseSession,
     settings: ApplicationSettings,
-    sms_provider: ConfiguredSMSProvider,
+    otp_delivery: ConfiguredOTPDelivery,
     rate_limiter: ConfiguredRateLimiter,
 ) -> APIResponse[ChangePasswordData]:
     """Replace the current password and invalidate all login sessions."""
@@ -191,7 +190,7 @@ async def change_password(
     service = AuthenticationService(
         session=session,
         settings=settings,
-        sms_provider=sms_provider,
+        otp_delivery=otp_delivery,
         rate_limiter=rate_limiter,
     )
     data = await service.change_password(
@@ -212,7 +211,7 @@ async def refresh_tokens(
     request: Request,
     session: DatabaseSession,
     settings: ApplicationSettings,
-    sms_provider: ConfiguredSMSProvider,
+    otp_delivery: ConfiguredOTPDelivery,
     rate_limiter: ConfiguredRateLimiter,
 ) -> APIResponse[RefreshTokenData]:
     """Rotate a refresh token and issue a new token pair."""
@@ -220,7 +219,7 @@ async def refresh_tokens(
     service = AuthenticationService(
         session=session,
         settings=settings,
-        sms_provider=sms_provider,
+        otp_delivery=otp_delivery,
         rate_limiter=rate_limiter,
     )
 
@@ -243,7 +242,7 @@ async def logout(
     request: Request,
     session: DatabaseSession,
     settings: ApplicationSettings,
-    sms_provider: ConfiguredSMSProvider,
+    otp_delivery: ConfiguredOTPDelivery,
     rate_limiter: ConfiguredRateLimiter,
 ) -> Response:
     """Revoke the supplied refresh session."""
@@ -251,7 +250,7 @@ async def logout(
     service = AuthenticationService(
         session=session,
         settings=settings,
-        sms_provider=sms_provider,
+        otp_delivery=otp_delivery,
         rate_limiter=rate_limiter,
     )
 
@@ -272,7 +271,7 @@ async def list_sessions(
     auth_context: CurrentAuthContext,
     session: DatabaseSession,
     settings: ApplicationSettings,
-    sms_provider: ConfiguredSMSProvider,
+    otp_delivery: ConfiguredOTPDelivery,
     rate_limiter: ConfiguredRateLimiter,
 ) -> APIResponse[SessionListData]:
     """List active login sessions for the current user."""
@@ -280,7 +279,7 @@ async def list_sessions(
     service = AuthenticationService(
         session=session,
         settings=settings,
-        sms_provider=sms_provider,
+        otp_delivery=otp_delivery,
         rate_limiter=rate_limiter,
     )
 
@@ -303,7 +302,7 @@ async def revoke_session(
     auth_context: CurrentAuthContext,
     session: DatabaseSession,
     settings: ApplicationSettings,
-    sms_provider: ConfiguredSMSProvider,
+    otp_delivery: ConfiguredOTPDelivery,
     rate_limiter: ConfiguredRateLimiter,
 ) -> Response:
     """Revoke another active login session."""
@@ -311,7 +310,7 @@ async def revoke_session(
     service = AuthenticationService(
         session=session,
         settings=settings,
-        sms_provider=sms_provider,
+        otp_delivery=otp_delivery,
         rate_limiter=rate_limiter,
     )
 
@@ -336,7 +335,7 @@ async def logout_all(
     auth_context: CurrentAuthContext,
     session: DatabaseSession,
     settings: ApplicationSettings,
-    sms_provider: ConfiguredSMSProvider,
+    otp_delivery: ConfiguredOTPDelivery,
     rate_limiter: ConfiguredRateLimiter,
 ) -> APIResponse[LogoutAllData]:
     """Revoke all login sessions for the current user."""
@@ -344,7 +343,7 @@ async def logout_all(
     service = AuthenticationService(
         session=session,
         settings=settings,
-        sms_provider=sms_provider,
+        otp_delivery=otp_delivery,
         rate_limiter=rate_limiter,
     )
 

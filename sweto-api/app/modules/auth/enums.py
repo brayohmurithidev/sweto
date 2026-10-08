@@ -25,6 +25,13 @@ class OTPPurpose(StrEnum):
     PHONE_CHANGE = "phone_change"
 
 
+class OTPDeliveryChannel(StrEnum):
+    """How a one-time password reaches the user."""
+
+    SMS = "sms"
+    WHATSAPP = "whatsapp"
+
+
 class OTPStatus(StrEnum):
     """Lifecycle status of an OTP challenge"""
 

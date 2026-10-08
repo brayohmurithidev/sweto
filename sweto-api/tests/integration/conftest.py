@@ -28,6 +28,7 @@ from app.core.config import Settings, get_settings
 from app.database.session import get_db_session
 from app.integrations.sms.base import SMSDeliveryError
 from app.integrations.sms.dependencies import get_sms_provider
+from app.integrations.whatsapp.dependencies import get_whatsapp_provider
 from app.main import app
 from app.rate_limit.dependencies import get_rate_limiter
 from app.rate_limit.memory import MemoryRateLimiter
@@ -72,7 +73,7 @@ async def db_engine(migrated_database_url: str) -> AsyncIterator[AsyncEngine]:
 
 @dataclass
 class RecordingSMSProvider:
-    """SMS provider double that records messages or fails on demand."""
+    """OTP provider double (SMS or WhatsApp) that records codes or fails."""
 
     sent: list[tuple[str, str]] = field(default_factory=list)
     failure: Exception | None = None
@@ -101,6 +102,7 @@ class RecordingSMSProvider:
 class IntegrationAPI:
     client: AsyncClient
     sms: RecordingSMSProvider
+    whatsapp: RecordingSMSProvider
     engine: AsyncEngine
     settings: Settings
 
@@ -112,7 +114,12 @@ class IntegrationAPI:
 
 @pytest.fixture
 def test_settings() -> Iterator[Settings]:
-    yield get_settings().model_copy(update={"sms_send_timeout_seconds": 0.2})
+    yield get_settings().model_copy(
+        update={
+            "sms_send_timeout_seconds": 0.2,
+            "whatsapp_send_timeout_seconds": 0.2,
+        }
+    )
 
 
 @pytest_asyncio.fixture
@@ -128,9 +135,11 @@ async def api(
             yield session
 
     sms = RecordingSMSProvider()
+    whatsapp = RecordingSMSProvider()
     limiter = MemoryRateLimiter()
     app.dependency_overrides[get_db_session] = session_override
     app.dependency_overrides[get_sms_provider] = lambda: sms
+    app.dependency_overrides[get_whatsapp_provider] = lambda: whatsapp
     app.dependency_overrides[get_rate_limiter] = lambda: limiter
     app.dependency_overrides[get_settings] = lambda: test_settings
     try:
@@ -138,7 +147,11 @@ async def api(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             yield IntegrationAPI(
-                client=client, sms=sms, engine=db_engine, settings=test_settings
+                client=client,
+                sms=sms,
+                whatsapp=whatsapp,
+                engine=db_engine,
+                settings=test_settings,
             )
     finally:
         app.dependency_overrides.clear()

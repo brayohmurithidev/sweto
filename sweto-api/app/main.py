@@ -28,6 +28,7 @@ from app.core.exceptions import (
     otp_challenge_consumed_handler,
     otp_challenge_expired_handler,
     otp_challenge_not_found_handler,
+    otp_channel_unavailable_handler,
     otp_delivery_failed_handler,
     otp_resend_cooldown_handler,
     password_change_required_handler,
@@ -67,6 +68,7 @@ from app.modules.auth.exceptions import (
     OTPChallengeConsumedError,
     OTPChallengeExpiredError,
     OTPChallengeNotFoundError,
+    OTPChannelUnavailableError,
     OTPDeliveryFailedError,
     OTPResendCooldownError,
     PasswordChangeRequiredError,
@@ -165,6 +167,10 @@ def create_application() -> FastAPI:
     application.add_exception_handler(
         OTPDeliveryFailedError,
         otp_delivery_failed_handler,
+    )
+    application.add_exception_handler(
+        OTPChannelUnavailableError,
+        otp_channel_unavailable_handler,
     )
 
     application.add_exception_handler(

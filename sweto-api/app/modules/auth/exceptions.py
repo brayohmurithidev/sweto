@@ -1,3 +1,6 @@
+from app.modules.auth.enums import OTPDeliveryChannel
+
+
 class AuthenticationError(Exception):
     """Base exception for authentication-domain failures."""
 
@@ -15,10 +18,27 @@ class OTPResendCooldownError(AuthenticationError):
 
 
 class OTPDeliveryFailedError(AuthenticationError):
-    """Raised when the verification code could not be sent by SMS."""
+    """Raised when the provider for the chosen channel could not send the code."""
 
-    def __init__(self) -> None:
-        super().__init__("We couldn't send your verification code. Please try again.")
+    def __init__(self, *, channel: OTPDeliveryChannel, retryable: bool) -> None:
+        self.channel = channel
+        self.retryable = retryable
+        via = "by SMS" if channel is OTPDeliveryChannel.SMS else "on WhatsApp"
+        super().__init__(
+            f"We couldn't send your verification code {via}. Please try again."
+        )
+
+
+class OTPChannelUnavailableError(AuthenticationError):
+    """Raised when the channel for this number has no provider configured."""
+
+    def __init__(self, *, channel: OTPDeliveryChannel) -> None:
+        self.channel = channel
+        via = "by SMS" if channel is OTPDeliveryChannel.SMS else "on WhatsApp"
+        super().__init__(
+            f"We can't send verification codes {via} yet. "
+            "Please try again later or use a different number."
+        )
 
 
 class OTPChallengeNotFoundError(AuthenticationError):
