@@ -67,12 +67,16 @@ def build_authentication_template_message(
 
     The code goes in the body parameter and in the copy-code button
     parameter, as Meta's authentication template example requires.
+
+    ``to`` keeps the leading ``+``. Meta prepends the business number's own
+    country code to numbers sent without it, which would misdeliver codes
+    to other countries.
     """
 
     return {
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
-        "to": phone_number.removeprefix("+"),
+        "to": phone_number,
         "type": "template",
         "template": {
             "name": template_name,

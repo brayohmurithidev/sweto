@@ -97,7 +97,7 @@ with `Authorization: Bearer <token>`:
 {
   "messaging_product": "whatsapp",
   "recipient_type": "individual",
-  "to": "256701234567",
+  "to": "+256701234567",
   "type": "template",
   "template": {
     "name": "<META_WHATSAPP_OTP_TEMPLATE_NAME>",
@@ -112,7 +112,9 @@ with `Authorization: Bearer <token>`:
 ```
 
 This follows Meta's copy-code authentication template example: the code
-goes in the body parameter and in the button parameter.
+goes in the body parameter and in the button parameter. `to` is the full
+E.164 number **with the `+`**: Meta prepends the business number's own
+country code to numbers sent without it, which would misdeliver codes.
 
 ## Configuration
 
@@ -126,7 +128,7 @@ with `WHATSAPP_PROVIDER=meta` unless every value is set.
 | `META_GRAPH_API_BASE_URL` | No | Default `https://graph.facebook.com` |
 | `META_GRAPH_API_VERSION` | No | Graph API version to pin, e.g. `v24.0` |
 | `META_WHATSAPP_PHONE_NUMBER_ID` | No | WhatsApp Manager / App Dashboard → API Setup → Phone number ID of the sender number |
-| `META_WHATSAPP_ACCESS_TOKEN` | **Yes** | Permanent system-user token with `whatsapp_business_messaging` (and `whatsapp_business_management`) |
+| `META_WHATSAPP_ACCESS_TOKEN` | **Yes** | Long-lived system-user token with `business_management`, `whatsapp_business_management` and `whatsapp_business_messaging`; choose "never expires" or plan rotation before its expiry |
 | `META_WHATSAPP_OTP_TEMPLATE_NAME` | No | Name of the approved authentication template |
 | `META_WHATSAPP_OTP_TEMPLATE_LANGUAGE` | No | The template's language code exactly as approved, e.g. `en` or `en_US` |
 | `META_APP_SECRET` | **Yes** | App Dashboard → App settings → Basic → App secret (signs webhooks) |
@@ -193,8 +195,10 @@ dead-end international sign-up.
 3. **Access token.** Business Settings → Users → System users:
    - create (or reuse) a system user;
    - give it the app and the WhatsApp Business Account;
-   - generate a **permanent token** with `whatsapp_business_messaging` and
-     `whatsapp_business_management`.
+   - generate a token with `business_management`,
+     `whatsapp_business_management` and `whatsapp_business_messaging`.
+     Meta calls system-user tokens long-lived with an expiry you choose:
+     pick "never" or put a rotation date in the calendar.
 
    The temporary token from API Setup expires quickly; don't use it.
 4. **Template.** Create the authentication template described above and

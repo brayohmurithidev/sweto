@@ -67,7 +67,7 @@ async def test_sends_the_authentication_template_to_the_phone_number_id() -> Non
             200,
             json={
                 "messaging_product": "whatsapp",
-                "contacts": [{"input": "256701234567", "wa_id": "256701234567"}],
+                "contacts": [{"input": "+256701234567", "wa_id": "256701234567"}],
                 "messages": [{"id": "wamid.ABC123"}],
             },
         )
@@ -83,7 +83,8 @@ async def test_sends_the_authentication_template_to_the_phone_number_id() -> Non
     assert json.loads(request.content) == {
         "messaging_product": "whatsapp",
         "recipient_type": "individual",
-        "to": "256701234567",
+        # E.164 with "+": without it Meta prepends the sender's country code.
+        "to": "+256701234567",
         "type": "template",
         "template": {
             "name": "sweto_login_code",
