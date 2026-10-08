@@ -12,6 +12,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -26,6 +27,7 @@ from app.modules.auth.enums import (
     AuthEventOutcome,
     AuthEventType,
     OTPDeliveryChannel,
+    OTPDeliveryStatus,
     OTPPurpose,
     OTPStatus,
     SessionStatus,
@@ -178,6 +180,15 @@ class OTPChallenge(
             "purpose",
             "status",
         ),
+        # At most one usable code per number and purpose, even when two
+        # requests race each other.
+        Index(
+            "uq_otp_challenges_one_pending",
+            "phone_number",
+            "purpose",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
     )
 
     phone_number: Mapped[str] = mapped_column(
@@ -212,6 +223,35 @@ class OTPChallenge(
         nullable=False,
         default=OTPDeliveryChannel.SMS,
         server_default=OTPDeliveryChannel.SMS.value,
+    )
+
+    # Provider message ID (for example a WhatsApp "wamid"), used to match
+    # delivery reports to this challenge.
+    provider_message_id: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+        unique=True,
+    )
+
+    delivery_status: Mapped[OTPDeliveryStatus] = mapped_column(
+        string_enum(
+            OTPDeliveryStatus,
+            name="otp_delivery_status",
+        ),
+        nullable=False,
+        default=OTPDeliveryStatus.PENDING,
+        server_default=OTPDeliveryStatus.PENDING.value,
+    )
+
+    delivery_status_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    # Provider error code when delivery failed (never the provider message).
+    delivery_error_code: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
     )
 
     code_hash: Mapped[str] = mapped_column(

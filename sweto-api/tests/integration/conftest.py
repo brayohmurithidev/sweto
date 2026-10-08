@@ -85,7 +85,7 @@ class RecordingSMSProvider:
         phone_number: str,
         otp_code: str,
         expires_in_seconds: int,
-    ) -> None:
+    ) -> str | None:
         if self.delay_seconds:
             import asyncio
 
@@ -93,6 +93,11 @@ class RecordingSMSProvider:
         if self.failure is not None:
             raise self.failure
         self.sent.append((phone_number, otp_code))
+        return self.last_message_id()
+
+    def last_message_id(self) -> str:
+        """Provider message ID of the last send, like a WhatsApp wamid."""
+        return f"wamid.test-{id(self)}-{len(self.sent)}"
 
     def last_code(self) -> str:
         return self.sent[-1][1]

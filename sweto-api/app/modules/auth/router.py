@@ -1,6 +1,7 @@
 from typing import Annotated
 from uuid import UUID
 
+import phonenumbers
 from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,8 +20,11 @@ from app.modules.auth.schemas import (
     LogoutAllData,
     LogoutAllRequest,
     LogoutRequest,
+    OTPDeliveryData,
     PasswordLoginData,
     PasswordLoginRequest,
+    PhoneCountriesData,
+    PhoneCountryData,
     RefreshTokenData,
     RefreshTokenRequest,
     RequestOTPData,
@@ -87,6 +91,51 @@ async def password_login(
         user_agent=request.headers.get("user-agent"),
     )
     return APIResponse(data=data)
+
+
+@router.get(
+    "/phone-countries",
+    response_model=APIResponse[PhoneCountriesData],
+)
+async def phone_countries(
+    otp_delivery: ConfiguredOTPDelivery,
+) -> APIResponse[PhoneCountriesData]:
+    """Countries whose numbers can sign in now, with their code channel."""
+
+    return APIResponse(
+        data=PhoneCountriesData(
+            countries=[
+                PhoneCountryData(
+                    region=region,
+                    dial_code=str(phonenumbers.country_code_for_region(region)),
+                    delivery_channel=channel,
+                )
+                for region, channel in otp_delivery.available_regions()
+            ]
+        )
+    )
+
+
+@router.get(
+    "/otp-challenges/{challenge_id}/delivery",
+    response_model=APIResponse[OTPDeliveryData],
+)
+async def otp_delivery_status(
+    challenge_id: UUID,
+    session: DatabaseSession,
+    settings: ApplicationSettings,
+    otp_delivery: ConfiguredOTPDelivery,
+    rate_limiter: ConfiguredRateLimiter,
+) -> APIResponse[OTPDeliveryData]:
+    """Where a sign-in code is on its way (accepted, delivered, failed...)."""
+
+    service = AuthenticationService(
+        session=session,
+        settings=settings,
+        otp_delivery=otp_delivery,
+        rate_limiter=rate_limiter,
+    )
+    return APIResponse(data=await service.get_otp_delivery(challenge_id=challenge_id))
 
 
 @router.post(

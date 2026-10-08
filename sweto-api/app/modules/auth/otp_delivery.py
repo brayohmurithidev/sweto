@@ -48,6 +48,24 @@ class OTPDelivery:
             ),
         }
 
+    def available_regions(self) -> list[tuple[str, OTPDeliveryChannel]]:
+        """Supported countries whose channel has a provider, Kenya first.
+
+        The app offers only these in its country picker, so a country whose
+        channel is switched off is never a dead end.
+        """
+
+        available = []
+        for region in self._supported_regions:
+            channel = (
+                OTPDeliveryChannel.SMS
+                if region in self._sms_regions
+                else OTPDeliveryChannel.WHATSAPP
+            )
+            if self._senders[channel][0] is not None:
+                available.append((region, channel))
+        return sorted(available, key=lambda item: (item[1] != "sms", item[0]))
+
     def channel_for(self, phone_number: str) -> OTPDeliveryChannel:
         """Return the channel for an E.164 number from a supported country.
 
@@ -77,18 +95,19 @@ class OTPDelivery:
         phone_number: str,
         otp_code: str,
         expires_in_seconds: int,
-    ) -> None:
+    ) -> str | None:
         """Send through the channel's provider within its timeout.
 
-        Raises TimeoutError, OTPDeliveryError or whatever the provider raised;
-        the caller records the failure. Never retries on another channel.
+        Returns the provider's message ID, if it gives one. Raises
+        TimeoutError, OTPDeliveryError or whatever the provider raised; the
+        caller records the failure. Never retries on another channel.
         """
 
         sender, timeout_seconds = self._senders[channel]
         if sender is None:
             raise OTPChannelUnavailableError(channel=channel)
         async with asyncio.timeout(timeout_seconds):
-            await sender.send_otp(
+            return await sender.send_otp(
                 phone_number=phone_number,
                 otp_code=otp_code,
                 expires_in_seconds=expires_in_seconds,

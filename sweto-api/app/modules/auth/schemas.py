@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
-from app.modules.auth.enums import OTPDeliveryChannel, UserRole
+from app.modules.auth.enums import OTPDeliveryChannel, OTPDeliveryStatus, UserRole
 from app.modules.auth.security import normalize_email
 
 
@@ -26,6 +26,30 @@ class RequestOTPData(BaseModel):
     resend_available_at: datetime
     expires_in_seconds: int
     delivery_channel: OTPDeliveryChannel
+
+
+class OTPDeliveryData(BaseModel):
+    """Where a sign-in code is on its way to the user.
+
+    ``delivery_status`` comes from the provider's delivery reports; it never
+    says anything about whether the code is still valid.
+    """
+
+    challenge_id: UUID
+    delivery_channel: OTPDeliveryChannel
+    delivery_status: OTPDeliveryStatus
+
+
+class PhoneCountryData(BaseModel):
+    """A country whose numbers can sign in right now."""
+
+    region: str
+    dial_code: str
+    delivery_channel: OTPDeliveryChannel
+
+
+class PhoneCountriesData(BaseModel):
+    countries: list[PhoneCountryData]
 
 
 class VerifyOTPRequest(BaseModel):

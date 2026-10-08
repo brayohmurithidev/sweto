@@ -2,6 +2,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
@@ -10,6 +11,7 @@ from app.modules.auth.audit import AuthAuditLogger
 from app.modules.auth.enums import (
     AuthEventOutcome,
     AuthEventType,
+    OTPDeliveryStatus,
     OTPPurpose,
     OTPStatus,
     SessionStatus,
@@ -52,6 +54,7 @@ from app.modules.auth.schemas import (
     ChangePasswordData,
     ChangePasswordRequest,
     LogoutAllData,
+    OTPDeliveryData,
     PasswordLoginData,
     PasswordLoginRequest,
     RefreshTokenData,
@@ -467,7 +470,15 @@ class AuthenticationService:
 
         self.otp_repository.add(challenge)
 
-        await self.session.flush()
+        try:
+            await self.session.flush()
+        except IntegrityError as exc:
+            # Another request for this number created a pending challenge
+            # between our check and insert (one pending code per number).
+            await self.session.rollback()
+            raise OTPResendCooldownError(
+                retry_after_seconds=self.settings.otp_resend_cooldown_seconds
+            ) from exc
 
         self.audit_logger.record(
             event_type=AuthEventType.OTP_REQUESTED,
@@ -487,7 +498,7 @@ class AuthenticationService:
         await self.session.refresh(challenge)
 
         try:
-            await self.otp_delivery.send(
+            provider_message_id = await self.otp_delivery.send(
                 channel=channel,
                 phone_number=phone_number,
                 otp_code=otp_code,
@@ -502,6 +513,13 @@ class AuthenticationService:
             )
             raise OTPDeliveryFailedError(channel=channel, retryable=retryable) from exc
 
+        # Accepted by the provider. Whether it arrived is reported later
+        # (WhatsApp status webhook); acceptance is not delivery.
+        challenge.provider_message_id = provider_message_id
+        challenge.delivery_status = OTPDeliveryStatus.ACCEPTED
+        challenge.delivery_status_updated_at = datetime.now(UTC)
+        await self.session.commit()
+
         return RequestOTPData(
             challenge_id=str(challenge.id),
             phone_number=challenge.phone_number,
@@ -509,6 +527,22 @@ class AuthenticationService:
             resend_available_at=resend_available_at,
             expires_in_seconds=self.settings.otp_expiry_seconds,
             delivery_channel=channel,
+        )
+
+    async def get_otp_delivery(self, *, challenge_id: UUID) -> OTPDeliveryData:
+        """Return where a sign-in code is on its way to the user.
+
+        Lets the app tell the user quickly when WhatsApp could not deliver
+        the code. Reveals no phone number and nothing about code validity.
+        """
+
+        challenge = await self.otp_repository.get_by_id(challenge_id=challenge_id)
+        if challenge is None or challenge.purpose is not OTPPurpose.LOGIN:
+            raise OTPChallengeNotFoundError("The verification challenge was not found.")
+        return OTPDeliveryData(
+            challenge_id=challenge.id,
+            delivery_channel=challenge.delivery_channel,
+            delivery_status=challenge.delivery_status,
         )
 
     async def _record_otp_delivery_failure(
@@ -527,14 +561,19 @@ class AuthenticationService:
         Returns whether retrying the same channel could succeed.
         """
 
+        provider_code: str | None = None
         if isinstance(error, TimeoutError):
             reason, retryable = "timeout", True
         elif isinstance(error, OTPDeliveryError):
             reason, retryable = error.reason, error.retryable
+            provider_code = error.provider_code
         else:
             reason, retryable = f"unexpected_{type(error).__name__}", True
 
         challenge.status = OTPStatus.EXPIRED
+        challenge.delivery_status = OTPDeliveryStatus.FAILED
+        challenge.delivery_status_updated_at = datetime.now(UTC)
+        challenge.delivery_error_code = (provider_code or reason)[:32]
 
         self.audit_logger.record(
             event_type=AuthEventType.OTP_DELIVERY_FAILED,
@@ -547,6 +586,7 @@ class AuthenticationService:
                 "reason": reason,
                 "retryable": retryable,
                 "channel": challenge.delivery_channel.value,
+                "provider_code": provider_code,
             },
         )
 
