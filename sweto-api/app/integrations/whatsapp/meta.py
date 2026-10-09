@@ -15,6 +15,7 @@ import httpx
 from pydantic import SecretStr
 
 from app.core.config import Settings
+from app.integrations.http_errors import transport_error
 from app.integrations.whatsapp.base import WhatsAppDeliveryError
 
 # Meta error codes, grouped by how SWETO reacts. Source: WhatsApp Cloud API
@@ -178,10 +179,8 @@ class MetaWhatsAppProvider:
                     response = await client.post(
                         self._config.messages_url, json=body, headers=headers
                     )
-        except httpx.TimeoutException as exc:
-            raise WhatsAppDeliveryError("timeout") from exc
         except httpx.TransportError as exc:
-            raise WhatsAppDeliveryError("provider_unreachable") from exc
+            raise transport_error(exc, WhatsAppDeliveryError) from exc
 
         if not response.is_success:
             raise _error_from_response(response)

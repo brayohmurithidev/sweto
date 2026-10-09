@@ -37,6 +37,8 @@ class OTPDeliveryStatus(StrEnum):
 
     Separate from OTPStatus: delivery never makes a code usable. Order:
     pending -> accepted -> sent -> delivered -> read; failed is terminal.
+    unknown means the send timed out or broke after it may have reached the
+    provider, so nobody knows whether the message will arrive.
     """
 
     PENDING = "pending"
@@ -45,6 +47,7 @@ class OTPDeliveryStatus(StrEnum):
     DELIVERED = "delivered"
     READ = "read"
     FAILED = "failed"
+    UNKNOWN = "unknown"
 
 
 class OTPStatus(StrEnum):

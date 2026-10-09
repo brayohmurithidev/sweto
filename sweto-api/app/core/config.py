@@ -1,9 +1,10 @@
 import re
+from collections.abc import Mapping
 from functools import lru_cache
 from typing import Literal
 
 import phonenumbers
-from pydantic import Field, PostgresDsn, SecretStr, model_validator
+from pydantic import Field, PostgresDsn, SecretStr, ValidationError, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,8 +31,22 @@ class Settings(BaseSettings):
     otp_hash_secret: str
     default_phone_region: str = "KE"
 
-    sms_provider: Literal["console"] = "console"
+    # Which SMS provider sends Kenyan sign-in codes. Switching provider is a
+    # configuration change only (see docs/sms-providers.md).
+    sms_provider: Literal["console", "advanta", "africastalking"] = "console"
     sms_send_timeout_seconds: float = Field(default=10, gt=0, le=30)
+
+    # Advanta (SMS_PROVIDER=advanta). Names follow Advanta's API fields.
+    advanta_base_url: str = "https://quicksms.advantasms.com"
+    advanta_api_key: SecretStr | None = None
+    advanta_partner_id: str | None = None
+    advanta_shortcode: str | None = None
+
+    # Africa's Talking (SMS_PROVIDER=africastalking).
+    africastalking_environment: Literal["sandbox", "live"] | None = None
+    africastalking_username: str | None = None
+    africastalking_api_key: SecretStr | None = None
+    africastalking_sender_id: str | None = None
 
     # Countries (ISO 3166 alpha-2) whose numbers can sign in. Codes go by SMS
     # in otp_sms_regions and by WhatsApp everywhere else (D-011).
@@ -122,6 +137,50 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def validate_sms_provider_settings(self) -> "Settings":
+        # Fail at startup, naming only the missing settings, never values.
+        if self.sms_provider == "advanta":
+            missing = _missing(
+                {
+                    "ADVANTA_API_KEY": self.advanta_api_key,
+                    "ADVANTA_PARTNER_ID": self.advanta_partner_id,
+                    "ADVANTA_SHORTCODE": self.advanta_shortcode,
+                }
+            )
+            if missing:
+                raise ValueError(
+                    "SMS_PROVIDER=advanta needs these settings: " + ", ".join(missing)
+                )
+            if not self.advanta_base_url.startswith("https://"):
+                raise ValueError("ADVANTA_BASE_URL must use https.")
+        if self.sms_provider == "africastalking":
+            missing = _missing(
+                {
+                    "AFRICASTALKING_ENVIRONMENT": self.africastalking_environment,
+                    "AFRICASTALKING_USERNAME": self.africastalking_username,
+                    "AFRICASTALKING_API_KEY": self.africastalking_api_key,
+                }
+            )
+            if missing:
+                raise ValueError(
+                    "SMS_PROVIDER=africastalking needs these settings: "
+                    + ", ".join(missing)
+                )
+            sandbox = self.africastalking_environment == "sandbox"
+            if sandbox and self.africastalking_username != "sandbox":
+                raise ValueError(
+                    "AFRICASTALKING_USERNAME must be 'sandbox' when "
+                    "AFRICASTALKING_ENVIRONMENT=sandbox."
+                )
+            # The sandbox never reaches a phone: real users would get nothing.
+            if sandbox and self.app_environment in {"staging", "production"}:
+                raise ValueError(
+                    "AFRICASTALKING_ENVIRONMENT=sandbox doesn't deliver real SMS "
+                    "and isn't allowed in staging or production."
+                )
+        return self
+
+    @model_validator(mode="after")
     def validate_otp_regions(self) -> "Settings":
         supported = set(self.otp_supported_regions)
         unknown = sorted(
@@ -155,14 +214,7 @@ class Settings(BaseSettings):
             "META_APP_SECRET": self.meta_app_secret,
             "META_WEBHOOK_VERIFY_TOKEN": self.meta_webhook_verify_token,
         }
-        missing = [
-            name
-            for name, value in required.items()
-            if value is None
-            or not (
-                value.get_secret_value() if isinstance(value, SecretStr) else value
-            ).strip()
-        ]
+        missing = _missing(required)
         if missing:
             raise ValueError(
                 "WHATSAPP_PROVIDER=meta needs these settings: " + ", ".join(missing)
@@ -198,6 +250,38 @@ class Settings(BaseSettings):
     )
 
 
+def _missing(required: Mapping[str, str | SecretStr | None]) -> list[str]:
+    """Names of required settings that are unset or blank."""
+
+    return [
+        name
+        for name, value in required.items()
+        if value is None
+        or not (
+            value.get_secret_value() if isinstance(value, SecretStr) else value
+        ).strip()
+    ]
+
+
+class ConfigurationError(RuntimeError):
+    """Invalid settings, described without any configured value."""
+
+
+def sanitized_settings_error(exc: ValidationError) -> ConfigurationError:
+    """Rebuild a settings ValidationError without the input values.
+
+    Pydantic's message repeats the whole input, which includes tokens and API
+    keys. Only the setting names and our own messages are kept.
+    """
+
+    problems = []
+    for error in exc.errors(include_input=False, include_url=False):
+        location = ".".join(str(part).upper() for part in error["loc"])
+        message = str(error["msg"]).removeprefix("Value error, ")
+        problems.append(f"{location}: {message}" if location else message)
+    return ConfigurationError("Invalid configuration: " + "; ".join(problems))
+
+
 @lru_cache
 def get_settings() -> Settings:
     """
@@ -205,4 +289,8 @@ def get_settings() -> Settings:
     Caching prevents the environment file from being re-read every time.
     settings are requested through dependency injection.
     """
-    return Settings()
+    try:
+        return Settings()
+    except ValidationError as exc:
+        # "from None" drops the original error, whose text holds the values.
+        raise sanitized_settings_error(exc) from None
