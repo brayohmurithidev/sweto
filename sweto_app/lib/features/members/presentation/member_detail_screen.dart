@@ -60,10 +60,17 @@ class _MemberDetailState extends ConsumerState<MemberDetailScreen> {
     );
     if (updated == null || !mounted) return;
     setState(() => _detail = updated);
+    final sms = switch (updated.smsStatus) {
+      'sent' => ' Receipt sent by SMS.',
+      'failed' => ' The SMS receipt couldn\'t be sent.',
+      _ => '',
+    };
     showSwetoSnackBar(
       context,
-      message: 'Payment recorded. ${standingLabel(updated.member)}.',
-      type: SwetoSnackBarType.success,
+      message: 'Payment recorded. ${standingLabel(updated.member)}.$sms',
+      type: updated.smsStatus == 'failed'
+          ? SwetoSnackBarType.warning
+          : SwetoSnackBarType.success,
     );
   }
 
@@ -92,6 +99,39 @@ class _MemberDetailState extends ConsumerState<MemberDetailScreen> {
         memberName: member.fullName,
         code: code,
       );
+      await _load();
+    } catch (error) {
+      if (mounted) {
+        showSwetoSnackBar(
+          context,
+          message: memberErrorMessage(error),
+          type: SwetoSnackBarType.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _setSms(bool enabled) async {
+    final member = _detail?.member;
+    if (member == null) return;
+    if (enabled) {
+      final confirmed = await showSwetoConfirmationDialog(
+        context,
+        title: 'Turn on SMS?',
+        message:
+            'Confirm that ${member.fullName} agreed to receive SMS from the '
+            'gym: their check-in code, receipts and expiry reminders.',
+        confirmLabel: 'They agreed',
+      );
+      if (!confirmed || !mounted) return;
+    }
+    setState(() => _busy = true);
+    try {
+      await ref
+          .read(membersRepositoryProvider)
+          .setSms(widget.gymId, member.id, enabled: enabled);
       await _load();
     } catch (error) {
       if (mounted) {
@@ -204,6 +244,8 @@ class _MemberDetailState extends ConsumerState<MemberDetailScreen> {
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     _checkInCodeCard(detail.member),
+                    const SizedBox(height: AppSpacing.sm),
+                    _smsCard(detail.member),
                   ],
                   const SizedBox(height: AppSpacing.lg),
                   Text('Membership history', style: AppTextStyles.titleLarge),
@@ -222,12 +264,37 @@ class _MemberDetailState extends ConsumerState<MemberDetailScreen> {
     );
   }
 
-  Widget _checkInCodeCard(GymMember member) => Container(
-    decoration: BoxDecoration(
-      color: AppColors.surface,
+  Widget _smsCard(GymMember member) => Material(
+    color: AppColors.surface,
+    shape: RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(AppRadius.lg),
-      border: Border.all(color: AppColors.border),
+      side: const BorderSide(color: AppColors.border),
     ),
+    clipBehavior: Clip.antiAlias,
+    child: SwitchListTile(
+      key: const Key('member-sms-switch'),
+      secondary: const Icon(Icons.sms_outlined, color: AppColors.primary),
+      title: const Text('SMS'),
+      subtitle: Text(
+        member.smsEnabled
+            ? 'Code, receipts and expiry reminders by SMS.'
+            : member.smsOptedOutAt != null
+            ? 'Opted out on ${formatDay(member.smsOptedOutAt!)}.'
+            : 'No consent recorded. No SMS are sent.',
+        style: AppTextStyles.bodySmall,
+      ),
+      value: member.smsEnabled,
+      onChanged: _busy ? null : _setSms,
+    ),
+  );
+
+  Widget _checkInCodeCard(GymMember member) => Material(
+    color: AppColors.surface,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      side: const BorderSide(color: AppColors.border),
+    ),
+    clipBehavior: Clip.antiAlias,
     child: ListTile(
       leading: const Icon(Icons.qr_code_2, color: AppColors.primary),
       title: const Text('Check-in code'),

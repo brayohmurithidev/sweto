@@ -13,6 +13,12 @@ abstract interface class MembersRepository {
     String gymId, {
     required String fullName,
     required String phoneNumber,
+    bool smsConsent = false,
+  });
+  Future<GymMember> setSms(
+    String gymId,
+    String memberId, {
+    required bool enabled,
   });
   Future<MemberDetail> getMember(String gymId, String memberId);
   Future<GymMember> setArchived(
