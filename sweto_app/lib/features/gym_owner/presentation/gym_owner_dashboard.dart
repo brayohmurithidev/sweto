@@ -6,8 +6,10 @@ import 'package:sweto_app/core/theme/colors.dart';
 import 'package:sweto_app/core/theme/radius.dart';
 import 'package:sweto_app/core/theme/spacing.dart';
 import 'package:sweto_app/core/theme/text_styles.dart';
+import 'package:sweto_app/features/auth/presentation/session_controller.dart';
 import 'package:sweto_app/features/gym_owner/domain/gym_owner_entities.dart';
 import 'package:sweto_app/features/gym_owner/presentation/onboarding_coordinator.dart';
+import 'package:sweto_app/shared/widgets/sweto_dialog.dart';
 import 'package:sweto_app/shared/widgets/sweto_snackbar.dart';
 
 class GymOwnerDashboardScreen extends ConsumerStatefulWidget {
@@ -22,6 +24,7 @@ class _DashboardState extends ConsumerState<GymOwnerDashboardScreen> {
   GymVerificationData? _verification;
   bool _loading = true;
   bool _refreshing = false;
+  bool _loggingOut = false;
   String? _error;
 
   @override
@@ -67,6 +70,40 @@ class _DashboardState extends ConsumerState<GymOwnerDashboardScreen> {
 
   void _openVerification() => context.goNamed(AppRoutes.gymVerificationName);
 
+  Future<void> _confirmLogout() async {
+    if (_loggingOut) return;
+    final confirmed = await showSwetoConfirmationDialog(
+      context,
+      title: 'Log out of SWETO?',
+      message:
+          'You’ll need your phone number and a verification code to sign in '
+          'again.',
+      confirmLabel: 'Log out',
+      type: SwetoDialogType.info,
+    );
+    if (!confirmed || !mounted) return;
+    setState(() => _loggingOut = true);
+    // The session controller revokes and clears the session; the router then
+    // returns the user to sign-in.
+    await ref.read(sessionControllerProvider.notifier).logout();
+  }
+
+  Widget _logoutButton() => IconButton(
+    key: const Key('dashboard-logout'),
+    tooltip: 'Log out',
+    onPressed: _loggingOut ? null : _confirmLogout,
+    icon: _loggingOut
+        ? const SizedBox(
+            width: 20,
+            height: 20,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: AppColors.primary,
+            ),
+          )
+        : const Icon(Icons.logout_rounded, color: AppColors.textSecondary),
+  );
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -87,6 +124,13 @@ class _DashboardState extends ConsumerState<GymOwnerDashboardScreen> {
               Text(_error ?? 'No gym is associated with this account.'),
               const SizedBox(height: 12),
               OutlinedButton(onPressed: _load, child: const Text('Retry')),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                key: const Key('dashboard-error-logout'),
+                onPressed: _loggingOut ? null : _confirmLogout,
+                icon: const Icon(Icons.logout_rounded),
+                label: const Text('Log out'),
+              ),
             ],
           ),
         ),
@@ -103,7 +147,17 @@ class _DashboardState extends ConsumerState<GymOwnerDashboardScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
             children: [
-              Text('Hello, there 👋', style: AppTextStyles.bodyMedium),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Hello, there 👋',
+                      style: AppTextStyles.bodyMedium,
+                    ),
+                  ),
+                  _logoutButton(),
+                ],
+              ),
               const SizedBox(height: 6),
               Text('Welcome to SWETO!', style: AppTextStyles.headingLarge),
               const SizedBox(height: 6),

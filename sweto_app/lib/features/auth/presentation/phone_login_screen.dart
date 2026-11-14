@@ -6,11 +6,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sweto_app/core/network/api_exception.dart';
 import 'package:sweto_app/core/router/app_routes.dart';
 import 'package:sweto_app/features/auth/presentation/auth_providers.dart';
+import 'package:sweto_app/features/auth/presentation/session_controller.dart';
 import 'package:sweto_app/core/theme/colors.dart';
+import 'package:sweto_app/core/theme/radius.dart';
 import 'package:sweto_app/core/theme/spacing.dart';
 import 'package:sweto_app/core/theme/text_styles.dart';
-import 'package:sweto_app/features/auth/presentation/widgets/kenya_phone_field.dart';
-import 'package:sweto_app/features/auth/utils/kenya_phone_formatter.dart';
+import 'package:sweto_app/core/phone/phone_country.dart';
+import 'package:sweto_app/core/phone/phone_number.dart';
+import 'package:sweto_app/features/auth/domain/entities/auth_entities.dart';
+import 'package:sweto_app/features/auth/domain/otp_channel_policy.dart';
+import 'package:sweto_app/shared/widgets/phone_number_field.dart';
 import 'package:sweto_app/shared/widgets/app_primary_button.dart';
 import 'package:sweto_app/shared/widgets/sweto_logo.dart';
 
@@ -25,12 +30,19 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
   late final TextEditingController _phoneController;
   late final FocusNode _phoneFocusNode;
 
+  PhoneCountry _country = kenya;
+
+  /// Countries offered in the picker. Starts with Kenya only and grows to
+  /// what the API says can sign in now, so a switched-off channel (such as
+  /// WhatsApp before launch) is never offered.
+  List<PhoneCountry> _countries = const [kenya];
+  Map<String, OtpDeliveryChannel> _channels = const {};
   bool _hasInteracted = false;
   bool _isSubmitting = false;
   String? _submissionError;
 
   bool get _isPhoneValid {
-    return KenyaPhoneFormatter.isValid(_phoneController.text);
+    return PhoneNumbers.isValid(_country, _phoneController.text);
   }
 
   String? get _phoneError {
@@ -39,7 +51,7 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
     }
 
     if (!_isPhoneValid) {
-      return 'Enter a valid Kenyan mobile number.';
+      return 'Enter a valid mobile number for ${_country.name}.';
     }
 
     return null;
@@ -51,11 +63,41 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
 
     _phoneController = TextEditingController();
     _phoneFocusNode = FocusNode();
+    _loadSignInCountries();
+  }
+
+  Future<void> _loadSignInCountries() async {
+    try {
+      final available = await ref
+          .read(otpDeliveryRepositoryProvider)
+          .getSignInCountries();
+      final channels = {
+        for (final country in available) country.isoCode: country.channel,
+      };
+      final countries = supportedPhoneCountries
+          .where((country) => channels.containsKey(country.isoCode))
+          .toList(growable: false);
+      if (!mounted || countries.isEmpty) return;
+      setState(() {
+        _countries = countries;
+        _channels = channels;
+        if (!countries.contains(_country)) _country = countries.first;
+      });
+    } catch (_) {
+      // Keep Kenya only: SMS sign-in works without this list.
+    }
   }
 
   void _onPhoneChanged(String value) {
     setState(() {
       _hasInteracted = true;
+      _submissionError = null;
+    });
+  }
+
+  void _onCountryChanged(PhoneCountry country) {
+    setState(() {
+      _country = country;
       _submissionError = null;
     });
   }
@@ -71,9 +113,7 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
       return;
     }
 
-    final phoneNumber = KenyaPhoneFormatter.toInternational(
-      _phoneController.text,
-    );
+    final phoneNumber = PhoneNumbers.toE164(_country, _phoneController.text);
 
     setState(() {
       _isSubmitting = true;
@@ -88,6 +128,7 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
         return;
       }
 
+      ref.read(sessionControllerProvider.notifier).clearEndReason();
       context.pushNamed(AppRoutes.otpName, extra: challenge);
     } on DioException catch (error) {
       final apiError = error.error;
@@ -127,6 +168,10 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final sessionExpired =
+        ref.watch(sessionControllerProvider).endReason ==
+        SessionEndReason.expired;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -177,6 +222,11 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
 
                         const SizedBox(height: AppSpacing.xl),
 
+                        if (sessionExpired) ...[
+                          const _SessionExpiredNotice(),
+                          const SizedBox(height: AppSpacing.lg),
+                        ],
+
                         Text(
                           'Phone number',
                           style: AppTextStyles.labelMedium.copyWith(
@@ -187,12 +237,23 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
 
                         const SizedBox(height: AppSpacing.xs),
 
-                        KenyaPhoneField(
+                        PhoneNumberField(
+                          country: _country,
+                          countries: _countries,
+                          onCountryChanged: _onCountryChanged,
                           controller: _phoneController,
                           focusNode: _phoneFocusNode,
                           errorText: _phoneError,
                           enabled: !_isSubmitting,
                           onChanged: _onPhoneChanged,
+                        ),
+
+                        const SizedBox(height: AppSpacing.xs),
+
+                        _OtpChannelHint(
+                          channel:
+                              _channels[_country.isoCode] ??
+                              expectedOtpChannel(_country),
                         ),
 
                         if (_submissionError != null) ...[
@@ -236,6 +297,76 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
               );
             },
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tells the user where the code will arrive, which depends on the country.
+class _OtpChannelHint extends StatelessWidget {
+  const _OtpChannelHint({required this.channel});
+
+  final OtpDeliveryChannel channel;
+
+  @override
+  Widget build(BuildContext context) {
+    final whatsapp = channel == OtpDeliveryChannel.whatsapp;
+    return Row(
+      key: const Key('otp-channel-hint'),
+      children: [
+        Icon(
+          whatsapp ? Icons.chat_outlined : Icons.sms_outlined,
+          size: 16,
+          color: AppColors.textMuted,
+        ),
+        const SizedBox(width: AppSpacing.xs),
+        Flexible(
+          child: Text(
+            whatsapp
+                ? 'Code will be sent via WhatsApp'
+                : 'Code will be sent by SMS',
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SessionExpiredNotice extends StatelessWidget {
+  const _SessionExpiredNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        key: const Key('session-expired-message'),
+        width: double.infinity,
+        padding: const EdgeInsets.all(AppSpacing.sm),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          border: Border.all(color: AppColors.warning),
+        ),
+        child: Row(
+          children: [
+            const Icon(
+              Icons.lock_outline_rounded,
+              color: AppColors.warning,
+              size: 20,
+            ),
+            const SizedBox(width: AppSpacing.xs),
+            Expanded(
+              child: Text(
+                sessionExpiredMessage,
+                style: AppTextStyles.bodySmall.copyWith(
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

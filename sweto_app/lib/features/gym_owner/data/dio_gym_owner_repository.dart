@@ -1,5 +1,4 @@
 import 'package:dio/dio.dart';
-import 'package:flutter/foundation.dart';
 import 'package:sweto_app/core/network/api_endpoints.dart';
 import 'package:sweto_app/core/network/api_response.dart';
 import 'package:sweto_app/features/gym_owner/domain/gym_owner_entities.dart';
@@ -14,9 +13,6 @@ class DioGymOwnerRepository implements GymOwnerRepository {
       ApiEndpoints.gyms,
       data: input.toJson(),
     );
-    if (kDebugMode) {
-      debugPrint('GYM CREATION RAW RESPONSE: ${r.data}');
-    }
     return _envelope(r.data, (d) => _gym(_map(d['gym'])));
   }
 
@@ -75,9 +71,6 @@ class DioGymOwnerRepository implements GymOwnerRepository {
     final r = await _dio.get<Map<String, dynamic>>(
       '${ApiEndpoints.gyms}/$id/onboarding',
     );
-    if (kDebugMode) {
-      debugPrint('GYM ONBOARDING RAW RESPONSE: ${r.data}');
-    }
     return _envelope(
       r.data,
       (d) => GymOnboarding(

@@ -13,9 +13,8 @@ import 'package:sweto_app/core/theme/text_styles.dart';
 import 'package:sweto_app/features/auth/domain/entities/auth_entities.dart';
 import 'package:sweto_app/features/auth/presentation/auth_providers.dart';
 import 'package:sweto_app/shared/widgets/app_primary_button.dart';
+import 'package:sweto_app/features/auth/presentation/session_controller.dart';
 import 'package:sweto_app/shared/widgets/sweto_logo.dart';
-import 'package:sweto_app/features/gym_owner/presentation/onboarding_coordinator.dart';
-import 'package:sweto_app/features/gym_owner/presentation/gym_owner_screens.dart';
 
 class OtpVerificationScreen extends ConsumerStatefulWidget {
   const OtpVerificationScreen({required this.challenge, super.key});
@@ -36,6 +35,9 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
   late OtpChallenge _challenge;
   late DateTime _resendAt;
   Timer? _timer;
+  Timer? _deliveryTimer;
+  bool _checkingDelivery = false;
+  OtpDeliveryStatus _delivery = OtpDeliveryStatus.accepted;
   late final AnimationController _shakeController;
   late final Animation<double> _shakeOffset;
 
@@ -59,11 +61,69 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
+    _watchDelivery();
+  }
+
+  /// Waits between delivery checks: quick at first, when a failure is
+  /// most likely, then backing off to 30 seconds.
+  static const _deliveryCheckDelays = [
+    Duration(seconds: 4),
+    Duration(seconds: 4),
+    Duration(seconds: 8),
+    Duration(seconds: 15),
+    Duration(seconds: 30),
+  ];
+  int _deliveryChecks = 0;
+
+  /// WhatsApp tells the API later whether the code arrived. Check until a
+  /// final answer, so a failed delivery is shown instead of a silent wait.
+  void _watchDelivery() {
+    _deliveryTimer?.cancel();
+    _deliveryChecks = 0;
+    _delivery = OtpDeliveryStatus.accepted;
+    if (_challenge.deliveryChannel != OtpDeliveryChannel.whatsapp) return;
+    _scheduleDeliveryCheck();
+  }
+
+  void _scheduleDeliveryCheck() {
+    final delay = _deliveryCheckDelays[_deliveryChecks
+        .clamp(0, _deliveryCheckDelays.length - 1)
+        .toInt()];
+    _deliveryTimer = Timer(delay, _checkDelivery);
+  }
+
+  Future<void> _checkDelivery() async {
+    if (_checkingDelivery || !mounted) return;
+    final challengeId = _challenge.challengeId;
+    if (DateTime.now().isAfter(_challenge.expiresAt)) return;
+    _checkingDelivery = true;
+    _deliveryChecks++;
+    var keepChecking = true;
+    try {
+      final status = await ref
+          .read(otpDeliveryRepositoryProvider)
+          .getDeliveryStatus(challengeId);
+      if (!mounted || challengeId != _challenge.challengeId) return;
+      keepChecking = !status.isFinal;
+      setState(() {
+        _delivery = status;
+        // The code never arrived, so a new one can be requested at once.
+        if (status == OtpDeliveryStatus.failed) _resendAt = DateTime.now();
+      });
+    } catch (_) {
+      // A network hiccup; the next check tries again.
+    } finally {
+      _checkingDelivery = false;
+      if (mounted && keepChecking && challengeId == _challenge.challengeId) {
+        _scheduleDeliveryCheck();
+      }
+    }
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    _deliveryTimer?.cancel();
     _shakeController.dispose();
     _focus.removeListener(_onFocusChanged);
     _controller.dispose();
@@ -104,19 +164,12 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
     FocusScope.of(context).unfocus();
     setState(() => _verifying = true);
     try {
-      final repo = ref.read(authRepositoryProvider);
-      final tokens = await repo.verifyOtp(
-        challengeId: _challenge.challengeId,
-        code: _controller.text,
-      );
-      await repo.saveTokens(tokens);
-      await repo.getMe();
-      final onboarding = await repo.getOnboarding();
-      final destination = await ref
-          .read(onboardingCoordinatorProvider)
-          .resolveAccount(onboarding);
-      if (!mounted) return;
-      goToDestination(context, destination);
+      final tokens = await ref
+          .read(authRepositoryProvider)
+          .verifyOtp(challengeId: _challenge.challengeId, code: _controller.text);
+      // Starting the session is all this screen does. The router then leaves
+      // the sign-in flow and the splash screen resolves the destination.
+      await ref.read(sessionControllerProvider.notifier).signIn(tokens);
     } on DioException catch (e) {
       final apiError = e.error;
       await _showVerificationError(
@@ -167,7 +220,9 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
         _controller.clear();
         _error = null;
         _hasOtpError = false;
+        _delivery = OtpDeliveryStatus.accepted;
       });
+      _watchDelivery();
     } on DioException catch (e) {
       final apiError = e.error;
       if (mounted) {
@@ -234,7 +289,9 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
                 ),
                 const SizedBox(height: AppSpacing.xl),
                 Text(
-                  'Check your SMS',
+                  _challenge.deliveryChannel == OtpDeliveryChannel.whatsapp
+                      ? 'Check WhatsApp'
+                      : 'Check your SMS',
                   textAlign: TextAlign.center,
                   style: AppTextStyles.headingLarge.copyWith(
                     color: AppColors.white,
@@ -292,6 +349,22 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
                     ),
                   ),
                 ),
+                if (_delivery == OtpDeliveryStatus.failed) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(
+                      'We couldn’t deliver your code on WhatsApp. Check that '
+                      'this number uses WhatsApp, then send a new code or '
+                      'go back and use a different number.',
+                      key: const Key('otp-delivery-failed'),
+                      textAlign: TextAlign.center,
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: Colors.redAccent,
+                      ),
+                    ),
+                  ),
+                ],
                 if (_error != null) ...[
                   const SizedBox(height: AppSpacing.sm),
                   Text(

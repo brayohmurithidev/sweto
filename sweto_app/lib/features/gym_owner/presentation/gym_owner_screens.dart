@@ -16,8 +16,10 @@ import 'package:sweto_app/core/theme/radius.dart';
 import 'package:sweto_app/core/theme/spacing.dart';
 import 'package:sweto_app/core/theme/text_styles.dart';
 import 'package:sweto_app/features/auth/presentation/auth_providers.dart';
-import 'package:sweto_app/features/auth/presentation/widgets/kenya_phone_field.dart';
-import 'package:sweto_app/features/auth/utils/kenya_phone_formatter.dart';
+import 'package:sweto_app/features/auth/presentation/session_controller.dart';
+import 'package:sweto_app/core/phone/phone_country.dart';
+import 'package:sweto_app/core/phone/phone_number.dart';
+import 'package:sweto_app/shared/widgets/phone_number_field.dart';
 import 'package:sweto_app/features/gym_owner/domain/gym_owner_entities.dart';
 import 'package:sweto_app/features/gym_owner/domain/gym_location_service.dart';
 import 'package:sweto_app/features/gym_owner/domain/onboarding_progress.dart';
@@ -210,6 +212,7 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
   final _name = TextEditingController();
   final _phone = TextEditingController();
   final _phoneFocus = FocusNode();
+  PhoneCountry _phoneCountry = kenya;
   final _email = TextEditingController();
   final _description = TextEditingController();
   bool _loading = false;
@@ -231,7 +234,7 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
         .getMe()
         .then((user) {
           if (!mounted) return;
-          _phone.text = _displayPhone(user.phoneNumber ?? '');
+          setState(() => _prefillPhone(user.phoneNumber));
           _email.text = user.email ?? '';
         })
         .catchError((_) {});
@@ -245,7 +248,7 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
               _gymId = gym.id;
               _editing = true;
               _name.text = gym.name;
-              _phone.text = _displayPhone(gym.phoneNumber ?? '');
+              _prefillPhone(gym.phoneNumber, clearIfMissing: true);
               _email.text = gym.email ?? '';
               _description.text = gym.description ?? '';
             });
@@ -267,6 +270,23 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
     super.dispose();
   }
 
+  /// Shows a stored E.164 number as country + subscriber number. Numbers
+  /// from countries the app doesn't list are left out rather than mangled.
+  /// With [clearIfMissing], a gym without a usable phone clears the field,
+  /// so the owner's own number (pre-filled first) isn't saved as the gym's.
+  void _prefillPhone(String? e164, {bool clearIfMissing = false}) {
+    final parts = PhoneNumbers.parse(e164);
+    if (parts == null) {
+      if (clearIfMissing) {
+        _phoneCountry = kenya;
+        _phone.clear();
+      }
+      return;
+    }
+    _phoneCountry = parts.country;
+    _phone.text = parts.subscriber;
+  }
+
   Future<void> _submit() async {
     final name = _name.text.trim();
     final email = _email.text.trim();
@@ -275,8 +295,11 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
       setState(() => _error = 'Enter your gym name.');
       return;
     }
-    if (phone.isNotEmpty && !KenyaPhoneFormatter.isValid(phone)) {
-      setState(() => _phoneError = 'Enter a valid Kenyan mobile number.');
+    if (phone.isNotEmpty && !PhoneNumbers.isValid(_phoneCountry, phone)) {
+      setState(
+        () => _phoneError =
+            'Enter a valid mobile number for ${_phoneCountry.name}.',
+      );
       return;
     }
     if (email.isNotEmpty &&
@@ -293,7 +316,7 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
         name: name,
         phoneNumber: phone.isEmpty
             ? null
-            : KenyaPhoneFormatter.toInternational(phone),
+            : PhoneNumbers.toE164(_phoneCountry, phone),
         email: email.isEmpty ? null : email.toLowerCase(),
         description: _description.text.trim().isEmpty
             ? null
@@ -521,11 +544,23 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
           onDeleteUploaded: _deleteUploaded,
         ),
         const SizedBox(height: AppSpacing.sm),
-        _field(_name, 'Gym name *', key: 'gym-name-field'),
-        KenyaPhoneField(
+        _field(
+          _name,
+          'Gym name *',
+          key: 'gym-name-field',
+          onChanged: (_) {
+            if (_error != null) setState(() => _error = null);
+          },
+        ),
+        PhoneNumberField(
           key: const Key('gym-phone-field'),
           fieldKey: const Key('gym-phone-input'),
           compact: true,
+          country: _phoneCountry,
+          onCountryChanged: (country) => setState(() {
+            _phoneCountry = country;
+            _phoneError = null;
+          }),
           controller: _phone,
           focusNode: _phoneFocus,
           errorText: _phoneError,
@@ -600,13 +635,6 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
       ),
     ),
   );
-
-  String _displayPhone(String value) {
-    final digits = KenyaPhoneFormatter.digitsOnly(value);
-    final local = digits.startsWith('254') ? digits.substring(3) : digits;
-    if (local.length != 9) return value;
-    return '+254 ${local.substring(0, 3)} ${local.substring(3, 6)} ${local.substring(6)}';
-  }
 }
 
 enum _PhotoStatus {
@@ -907,6 +935,9 @@ class _GymPricingScreenState extends ConsumerState<GymPricingScreen> {
   }
 
   String _clean(String value) => value.replaceAll(',', '').trim();
+
+  bool _hasPrice(_PlanDraft plan) =>
+      (int.tryParse(_clean(plan.controller.text)) ?? 0) > 0;
   Future<void> _editPlan(_PlanDraft plan) async {
     final editor = TextEditingController(text: plan.controller.text);
     final saved = await showModalBottomSheet<bool>(
@@ -987,6 +1018,7 @@ class _GymPricingScreenState extends ConsumerState<GymPricingScreen> {
             _gymId!,
             GymPricing(
               dayPasses: [_dayPass]
+                  .where(_hasPrice)
                   .map(
                     (p) => GymPricingPlan(
                       name: p.name,
@@ -997,10 +1029,11 @@ class _GymPricingScreenState extends ConsumerState<GymPricingScreen> {
                   )
                   .toList(),
               membershipPlans: _plans
+                  .where(_hasPrice)
                   .map(
                     (p) => GymPricingPlan(
                       name: p.name,
-                      amount: int.tryParse(_clean(p.controller.text)) ?? 0,
+                      amount: int.parse(_clean(p.controller.text)),
                       billingPeriod: p.period,
                       isActive: p.active,
                     ),
@@ -1865,6 +1898,7 @@ class _GymBusinessDetailsScreenState
   final _contact = TextEditingController();
   final _phone = TextEditingController();
   final _businessPhoneFocus = FocusNode();
+  PhoneCountry _phoneCountry = kenya;
   String? _gymId;
   String? _type;
   bool _loading = true;
@@ -1896,9 +1930,11 @@ class _GymBusinessDetailsScreenState
         _registration.text = gym.registrationNumber ?? '';
         _tax.text = gym.taxNumber ?? '';
         _contact.text = gym.contactPersonName ?? '';
-        _phone.text = gym.contactPersonPhone == null
-            ? ''
-            : _displayPhone(gym.contactPersonPhone!);
+        final phone = PhoneNumbers.parse(gym.contactPersonPhone);
+        if (phone != null) {
+          _phoneCountry = phone.country;
+          _phone.text = phone.subscriber;
+        }
         _loading = false;
       });
     } catch (_) {
@@ -1934,8 +1970,11 @@ class _GymBusinessDetailsScreenState
       setState(() => _error = 'Enter the contact person name.');
       return;
     }
-    if (!KenyaPhoneFormatter.isValid(_phone.text)) {
-      setState(() => _phoneError = 'Enter a valid Kenyan mobile number.');
+    if (!PhoneNumbers.isValid(_phoneCountry, _phone.text)) {
+      setState(
+        () => _phoneError =
+            'Enter a valid mobile number for ${_phoneCountry.name}.',
+      );
       return;
     }
     if (_legal.text.trim().length < 2) {
@@ -1959,7 +1998,8 @@ class _GymBusinessDetailsScreenState
                   : _registration.text.trim(),
               taxNumber: _tax.text.trim().isEmpty ? null : _tax.text.trim(),
               contactPersonName: _contact.text.trim(),
-              contactPersonPhone: KenyaPhoneFormatter.toInternational(
+              contactPersonPhone: PhoneNumbers.toE164(
+                _phoneCountry,
                 _phone.text,
               ),
             ),
@@ -1973,14 +2013,6 @@ class _GymBusinessDetailsScreenState
     } finally {
       if (mounted) setState(() => _saving = false);
     }
-  }
-
-  static String _displayPhone(String value) {
-    final digits = KenyaPhoneFormatter.digitsOnly(value);
-    final local = digits.startsWith('254') ? digits.substring(3) : digits;
-    return local.length == 9
-        ? '+254 ${local.substring(0, 3)} ${local.substring(3, 6)} ${local.substring(6)}'
-        : value;
   }
 
   @override
@@ -2072,10 +2104,15 @@ class _GymBusinessDetailsScreenState
                 padding: EdgeInsets.only(bottom: AppSpacing.xs),
                 child: Text('Phone Number', style: AppTextStyles.labelMedium),
               ),
-              KenyaPhoneField(
+              PhoneNumberField(
                 key: const Key('business-phone-field'),
                 fieldKey: const Key('business-phone-input'),
                 compact: true,
+                country: _phoneCountry,
+                onCountryChanged: (country) => setState(() {
+                  _phoneCountry = country;
+                  _phoneError = null;
+                }),
                 controller: _phone,
                 focusNode: _businessPhoneFocus,
                 errorText: _phoneError,
@@ -2324,7 +2361,7 @@ class _GymLocationScreenState extends ConsumerState<GymLocationScreen> {
         setState(
           () => _locationError = error is _LocationMessage
               ? error.message
-              : 'Current location is unavailable.',
+              : 'We couldn’t find your location. Drag the map to your gym instead.',
         );
     } finally {
       if (mounted) setState(() => _locating = false);
@@ -2709,13 +2746,14 @@ class _UnsupportedOnboardingScreenState
   Future<void> _logout() async {
     if (_loggingOut) return;
     setState(() => _loggingOut = true);
-    await ref.read(authRepositoryProvider).clearTokens();
-    if (!mounted) return;
-    context.goNamed(AppRoutes.phoneLoginName);
+    // The session controller revokes and clears the session; the router then
+    // returns the user to sign-in.
+    await ref.read(sessionControllerProvider.notifier).logout();
   }
 
   @override
   Widget build(BuildContext context) => _OnboardingScaffold(
+    showAccountMenu: false,
     child: Column(
       children: [
         const KeyedSubtree(
@@ -2857,6 +2895,18 @@ class _VerificationDocumentCard extends StatelessWidget {
     ),
   );
 }
+
+/// File types accepted for verification documents.
+///
+/// Each platform filters differently: iOS needs uniform type identifiers (the
+/// iOS file_selector implementation throws without them, before the picker
+/// opens), Android and web use MIME types, desktop uses extensions.
+final verificationDocumentTypeGroup = XTypeGroup(
+  label: 'Verification documents',
+  extensions: const ['pdf', 'jpg', 'jpeg', 'png'],
+  mimeTypes: const ['application/pdf', 'image/jpeg', 'image/png'],
+  uniformTypeIdentifiers: const ['com.adobe.pdf', 'public.jpeg', 'public.png'],
+);
 
 class GymVerificationSetupScreen extends ConsumerStatefulWidget {
   const GymVerificationSetupScreen({super.key});
@@ -3038,12 +3088,7 @@ class _GymVerificationSetupScreenState
     setState(() => _pickingFile = true);
     try {
       final file = await openFile(
-        acceptedTypeGroups: [
-          XTypeGroup(
-            label: 'Verification documents',
-            extensions: ['pdf', 'jpg', 'jpeg', 'png'],
-          ),
-        ],
+        acceptedTypeGroups: [verificationDocumentTypeGroup],
       );
       if (!mounted) return;
       if (file != null) {
@@ -3056,7 +3101,10 @@ class _GymVerificationSetupScreenState
     } on PlatformException {
       if (mounted)
         setState(() => _error = 'Photo access is unavailable right now.');
-    } catch (_) {
+    } catch (error) {
+      if (kDebugMode) {
+        debugPrint('Verification document picker failed: ${error.runtimeType}');
+      }
       if (mounted)
         setState(
           () => _error = 'We couldn’t choose that file. Please try again.',
@@ -3117,7 +3165,8 @@ class _GymVerificationSetupScreenState
       });
     } catch (error) {
       if (kDebugMode) {
-        debugPrint('VERIFICATION DOCUMENT UPLOAD FAILED: $error');
+        // Log the type only: upload errors can carry presigned URLs.
+        debugPrint('Verification document upload failed: ${error.runtimeType}');
       }
       if (mounted) {
         setState(() => _error = _friendlyVerificationUploadError(error));
@@ -3271,22 +3320,27 @@ class _GymVerificationSetupScreenState
                     size: 28,
                   ),
                   const SizedBox(width: 14),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _pickingFile
-                            ? 'Choosing file…'
-                            : (_selectedFileName ?? 'Choose file'),
-                        style: AppTextStyles.labelMedium,
-                      ),
-                      Text(
-                        'PDF, JPG or PNG · Max 10MB',
-                        style: AppTextStyles.bodySmall,
-                      ),
-                    ],
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _pickingFile
+                              ? 'Choosing file…'
+                              : (_selectedFileName ?? 'Choose file'),
+                          style: AppTextStyles.labelMedium,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          'PDF, JPG or PNG · Max 10MB',
+                          style: AppTextStyles.bodySmall,
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 16),
                 ],
               ),
             ),
@@ -3437,13 +3491,14 @@ class _VerificationPendingScreenState
   Future<void> _logout() async {
     if (_loggingOut) return;
     setState(() => _loggingOut = true);
-    await ref.read(authRepositoryProvider).clearTokens();
-    if (!mounted) return;
-    context.goNamed(AppRoutes.phoneLoginName);
+    // The session controller revokes and clears the session; the router then
+    // returns the user to sign-in.
+    await ref.read(sessionControllerProvider.notifier).logout();
   }
 
   @override
   Widget build(BuildContext context) => _OnboardingScaffold(
+    showAccountMenu: false,
     child: Column(
       children: [
         const KeyedSubtree(
@@ -3480,10 +3535,30 @@ class _VerificationPendingScreenState
 }
 
 class _OnboardingScaffold extends StatelessWidget {
-  const _OnboardingScaffold({required this.child});
+  const _OnboardingScaffold({required this.child, this.showAccountMenu = true});
   final Widget child;
+
+  /// Shows a top-right menu with "Log out" so an owner is never stuck in
+  /// onboarding. Screens with their own logout button turn it off.
+  final bool showAccountMenu;
+
   @override
   Widget build(BuildContext context) {
+    final page = _buildPage(context);
+    if (!showAccountMenu) return page;
+    return Stack(
+      children: [
+        page,
+        const Positioned(
+          top: 0,
+          right: 0,
+          child: SafeArea(child: _OnboardingAccountMenu()),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPage(BuildContext context) {
     final bodyPadding = EdgeInsets.fromLTRB(
       AppSpacing.md,
       AppSpacing.lg,
@@ -3546,6 +3621,52 @@ class _OnboardingScaffold extends StatelessWidget {
           padding: bodyPadding,
           child: child,
         ),
+      ),
+    );
+  }
+}
+
+class _OnboardingAccountMenu extends ConsumerWidget {
+  const _OnboardingAccountMenu();
+
+  Future<void> _logout(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showSwetoConfirmationDialog(
+      context,
+      title: 'Log out of SWETO?',
+      message:
+          'Your gym setup is saved. Sign in again with your phone number to '
+          'continue where you left off.',
+      confirmLabel: 'Log out',
+      type: SwetoDialogType.info,
+    );
+    if (!confirmed) return;
+    // The session controller revokes and clears the session; the router then
+    // returns the user to sign-in.
+    await ref.read(sessionControllerProvider.notifier).logout();
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return Material(
+      type: MaterialType.transparency,
+      child: PopupMenuButton<String>(
+        key: const Key('onboarding-account-menu'),
+        tooltip: 'Account',
+        icon: const Icon(
+          Icons.more_vert_rounded,
+          color: AppColors.textSecondary,
+        ),
+        color: AppColors.surfaceElevated,
+        onSelected: (value) {
+          if (value == 'logout') _logout(context, ref);
+        },
+        itemBuilder: (context) => const [
+          PopupMenuItem<String>(
+            key: Key('onboarding-account-menu-logout'),
+            value: 'logout',
+            child: Text('Log out'),
+          ),
+        ],
       ),
     );
   }
