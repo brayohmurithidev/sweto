@@ -138,6 +138,9 @@ class _DashboardState extends ConsumerState<GymOwnerDashboardScreen> {
     }
     final status = _verification?.status ?? 'not_submitted';
     final limited = status != 'approved';
+    // Once documents are submitted (pending) or approved there is nothing
+    // for the owner to do on the verification step.
+    final canEditVerification = status != 'approved' && status != 'pending';
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -215,10 +218,10 @@ class _DashboardState extends ConsumerState<GymOwnerDashboardScreen> {
               _task(
                 'Business Documents',
                 status == 'approved' || status == 'pending',
-                onTap: _openVerification,
+                onTap: canEditVerification ? _openVerification : null,
               ),
               const SizedBox(height: 24),
-              if (status != 'approved')
+              if (canEditVerification)
                 FilledButton.icon(
                   onPressed: _openVerification,
                   icon: const Icon(Icons.shield_outlined),
