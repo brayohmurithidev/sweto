@@ -1,6 +1,31 @@
+import os
+
 import pytest
 
 from app.core.config import Settings
+
+# Provider settings a developer may have in their shell or sweto-api/.env.
+# Tests that build Settings directly must see only what they pass in.
+_PROVIDER_ENV_PREFIXES = (
+    "SMS_",
+    "WHATSAPP_",
+    "ADVANTA_",
+    "AFRICASTALKING_",
+    "META_",
+)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_settings_from_local_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep a developer's .env and provider env vars out of the tests.
+
+    The app itself was already configured at import time, so this only
+    affects Settings objects that tests construct.
+    """
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+    for name in list(os.environ):
+        if name.upper().startswith(_PROVIDER_ENV_PREFIXES):
+            monkeypatch.delenv(name)
 
 
 @pytest.fixture
