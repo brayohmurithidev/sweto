@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:geocoding/geocoding.dart' as geocoding;
 import 'package:geolocator/geolocator.dart';
 
@@ -35,6 +37,8 @@ abstract interface class GymLocationService {
   Future<bool> openLocationSettings();
 }
 
+const currentPositionTimeout = Duration(seconds: 10);
+
 class DeviceGymLocationService implements GymLocationService {
   @override
   Future<LocationPermissionState> checkPermission() async {
@@ -52,8 +56,19 @@ class DeviceGymLocationService implements GymLocationService {
 
   @override
   Future<GeoPosition> getCurrentPosition() async {
-    final value = await GeolocatorPlatform.instance.getCurrentPosition();
-    return GeoPosition(value.latitude, value.longitude);
+    try {
+      final value = await GeolocatorPlatform.instance.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: currentPositionTimeout,
+        ),
+      );
+      return GeoPosition(value.latitude, value.longitude);
+    } on TimeoutException {
+      final last = await GeolocatorPlatform.instance.getLastKnownPosition();
+      if (last == null) rethrow;
+      return GeoPosition(last.latitude, last.longitude);
+    }
   }
 
   @override
