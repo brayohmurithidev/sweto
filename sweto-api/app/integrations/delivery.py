@@ -19,6 +19,10 @@ class OTPDeliveryError(Exception):
     ``provider_code`` is the provider's own error code (for example Meta's
     ``131026``), kept for the audit log; never put provider messages here,
     because they can contain the recipient's number.
+    ``outcome_unknown`` is True when the request may have reached the
+    provider (a read timeout, a dropped connection, an unreadable success
+    response): the message may still arrive. Never retry such a send through
+    another provider, or the user can get two codes.
     """
 
     def __init__(
@@ -27,10 +31,12 @@ class OTPDeliveryError(Exception):
         *,
         retryable: bool = True,
         provider_code: str | None = None,
+        outcome_unknown: bool = False,
     ) -> None:
         self.reason = reason
         self.retryable = retryable
         self.provider_code = provider_code
+        self.outcome_unknown = outcome_unknown
         super().__init__(reason)
 
 

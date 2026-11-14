@@ -56,9 +56,10 @@ bottom of this page pass.
   error code).
 
 **Immediate send failures** (Meta rejects the request, timeout, network
-error):
+error; the same rules apply to every SMS provider, see `sms-providers.md`):
 - the challenge is expired right away;
-- `delivery_status = failed`;
+- `delivery_status = failed`, or `unknown` when the request may have
+  reached Meta (read timeout, dropped connection, unreadable reply);
 - the API answers `503 OTP_DELIVERY_FAILED` with `details.channel` and
   `details.retryable`;
 - no cooldown applies.
@@ -84,7 +85,8 @@ contain the phone number.
 | 132000, 132001, 132005, 132007, 132012, 132015, 132016 | `template_rejected`: missing, unapproved, paused, disabled, wrong parameters | No (fix template) |
 | 100, 131008, 131009 | `invalid_request` | No |
 | 1, 2, 131000, 131016 (or HTTP 5xx) | `provider_unavailable` | Yes |
-| timeout / network error | `timeout` / `provider_unreachable` | Yes |
+| refused connection | `provider_unreachable` (not sent) | Yes |
+| read timeout / dropped connection | `timeout` / `provider_unreachable`, outcome unknown: `delivery_status = unknown` | Yes |
 | 2xx without `messages[0].id` | `malformed_response` | Yes |
 | anything else | `provider_rejected` | No |
 

@@ -41,6 +41,8 @@ _UNMATCHED_RETENTION = timedelta(days=1)
 _PROGRESS = {
     OTPDeliveryStatus.PENDING: 0,
     OTPDeliveryStatus.ACCEPTED: 1,
+    # A late report can still say what happened to an ambiguous send.
+    OTPDeliveryStatus.UNKNOWN: 1,
     OTPDeliveryStatus.SENT: 2,
     OTPDeliveryStatus.DELIVERED: 3,
     OTPDeliveryStatus.READ: 4,

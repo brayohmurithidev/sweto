@@ -640,16 +640,24 @@ class AuthenticationService:
         """
 
         provider_code: str | None = None
+        # A timeout or a break after the request left us may still deliver
+        # the message: record that honestly as unknown, not failed.
+        outcome_unknown = False
         if isinstance(error, TimeoutError):
-            reason, retryable = "timeout", True
+            reason, retryable, outcome_unknown = "timeout", True, True
         elif isinstance(error, OTPDeliveryError):
             reason, retryable = error.reason, error.retryable
             provider_code = error.provider_code
+            outcome_unknown = error.outcome_unknown
         else:
             reason, retryable = f"unexpected_{type(error).__name__}", True
 
+        # Retired either way, so the user can ask for a new code at once and
+        # there is never more than one usable code.
         challenge.status = OTPStatus.EXPIRED
-        challenge.delivery_status = OTPDeliveryStatus.FAILED
+        challenge.delivery_status = (
+            OTPDeliveryStatus.UNKNOWN if outcome_unknown else OTPDeliveryStatus.FAILED
+        )
         challenge.delivery_status_updated_at = datetime.now(UTC)
         challenge.delivery_error_code = (provider_code or reason)[:32]
 
@@ -665,6 +673,7 @@ class AuthenticationService:
                 "retryable": retryable,
                 "channel": challenge.delivery_channel.value,
                 "provider_code": provider_code,
+                "outcome_unknown": outcome_unknown,
             },
         )
 
