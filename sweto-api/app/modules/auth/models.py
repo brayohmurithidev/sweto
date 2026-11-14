@@ -12,6 +12,7 @@ from sqlalchemy import (
     String,
     Text,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -25,6 +26,8 @@ from app.database.types import string_enum
 from app.modules.auth.enums import (
     AuthEventOutcome,
     AuthEventType,
+    OTPDeliveryChannel,
+    OTPDeliveryStatus,
     OTPPurpose,
     OTPStatus,
     SessionStatus,
@@ -177,6 +180,15 @@ class OTPChallenge(
             "purpose",
             "status",
         ),
+        # At most one usable code per number and purpose, even when two
+        # requests race each other.
+        Index(
+            "uq_otp_challenges_one_pending",
+            "phone_number",
+            "purpose",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
     )
 
     phone_number: Mapped[str] = mapped_column(
@@ -201,6 +213,45 @@ class OTPChallenge(
         nullable=False,
         default=OTPStatus.PENDING,
         server_default=OTPStatus.PENDING.value,
+    )
+
+    delivery_channel: Mapped[OTPDeliveryChannel] = mapped_column(
+        string_enum(
+            OTPDeliveryChannel,
+            name="otp_delivery_channel",
+        ),
+        nullable=False,
+        default=OTPDeliveryChannel.SMS,
+        server_default=OTPDeliveryChannel.SMS.value,
+    )
+
+    # Provider message ID (for example a WhatsApp "wamid"), used to match
+    # delivery reports to this challenge.
+    provider_message_id: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+        unique=True,
+    )
+
+    delivery_status: Mapped[OTPDeliveryStatus] = mapped_column(
+        string_enum(
+            OTPDeliveryStatus,
+            name="otp_delivery_status",
+        ),
+        nullable=False,
+        default=OTPDeliveryStatus.PENDING,
+        server_default=OTPDeliveryStatus.PENDING.value,
+    )
+
+    delivery_status_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    # Provider error code when delivery failed (never the provider message).
+    delivery_error_code: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
     )
 
     code_hash: Mapped[str] = mapped_column(
@@ -426,4 +477,42 @@ class AuthEvent(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
+    )
+
+
+class UnmatchedDeliveryReport(
+    UUIDPrimaryKeyMixin,
+    Base,
+):
+    """A provider status report that arrived before its challenge was saved.
+
+    Meta can report a status within milliseconds of accepting a message,
+    sometimes before SWETO has stored the message ID. Such reports wait here
+    and are applied as soon as the challenge records the ID. Rows older than
+    a day are removed (they belong to messages SWETO didn't send).
+    """
+
+    __tablename__ = "otp_unmatched_delivery_reports"
+
+    provider_message_id: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+        index=True,
+    )
+
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+    )
+
+    error_code: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+    )
+
+    received_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        index=True,
     )

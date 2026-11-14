@@ -394,6 +394,13 @@ class UpdateGymOperatingHoursData(BaseModel):
 
 
 class GymDayPassInput(BaseModel):
+    id: UUID | None = Field(
+        default=None,
+        description=(
+            "ID of an existing day pass to update. Without an ID, a day pass "
+            "with the same name (case-insensitive) is updated in place."
+        ),
+    )
     name: str = Field(
         min_length=2,
         max_length=120,
@@ -548,6 +555,11 @@ class UpdateGymPricingRequest(BaseModel):
 
         if len(day_pass_names) != len(set(day_pass_names)):
             raise ValueError("Day-pass names must be unique.")
+
+        day_pass_ids = [day_pass.id for day_pass in self.day_passes if day_pass.id]
+
+        if len(day_pass_ids) != len(set(day_pass_ids)):
+            raise ValueError("Each day pass can only appear once.")
 
         membership_names = [plan.name.casefold() for plan in self.membership_plans]
 

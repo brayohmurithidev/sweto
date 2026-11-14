@@ -12,5 +12,6 @@ git commit -m "ci: enable API and app workflows"
 git push
 ```
 
-- `api.yml`: ruff (lint and format), mypy, pytest, single Alembic head
+- `api.yml`: ruff (lint and format), mypy, pytest including the PostgreSQL
+  integration tests, single Alembic head, `alembic check` for model drift
 - `app.yml`: flutter analyze, flutter test

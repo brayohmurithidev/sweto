@@ -44,7 +44,7 @@ def build_service(settings: Settings) -> AuthenticationService:
     return AuthenticationService(
         session=session,
         settings=settings,
-        sms_provider=Mock(),
+        otp_delivery=Mock(),
         rate_limiter=MemoryRateLimiter(),
     )
 

@@ -2,6 +2,10 @@ class GymError(Exception):
     """Base exception for gym-related failures."""
 
 
+class GymDayPassNotFoundError(GymError):
+    """Raised when pricing refers to a day pass this gym does not have."""
+
+
 class GymPhotoUploadInvalidError(GymError):
     """Raised when gym-photo upload metadata is invalid."""
 
@@ -45,6 +49,16 @@ class GymVerificationRequirementsError(GymError):
         self.missing_document_types = missing_document_types
         super().__init__(
             "Missing required documents: " + ", ".join(missing_document_types) + "."
+        )
+
+
+class GymProfileIncompleteError(GymError):
+    """Raised when verification is submitted before the gym profile is done."""
+
+    def __init__(self, next_step: str) -> None:
+        self.next_step = next_step
+        super().__init__(
+            "Complete your gym profile before submitting it for verification."
         )
 
 

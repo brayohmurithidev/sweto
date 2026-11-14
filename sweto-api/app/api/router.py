@@ -7,6 +7,9 @@ from app.modules.admin.gym_verification_router import (
 )
 from app.modules.admin.router import router as admin_router
 from app.modules.auth.router import router as auth_router
+from app.modules.auth.whatsapp_webhook_router import (
+    router as whatsapp_webhook_router,
+)
 from app.modules.gyms.router import router as gym_router
 from app.modules.profiles.router import (
     account_router,
@@ -21,6 +24,7 @@ api_router.include_router(health_router)
 api_router.include_router(admin_router)
 api_router.include_router(admin_gym_verification_router)
 api_router.include_router(auth_router)
+api_router.include_router(whatsapp_webhook_router)
 api_router.include_router(account_router)
 api_router.include_router(profile_router)
 api_router.include_router(gym_router)

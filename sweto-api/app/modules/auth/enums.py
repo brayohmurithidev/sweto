@@ -25,6 +25,31 @@ class OTPPurpose(StrEnum):
     PHONE_CHANGE = "phone_change"
 
 
+class OTPDeliveryChannel(StrEnum):
+    """How a one-time password reaches the user."""
+
+    SMS = "sms"
+    WHATSAPP = "whatsapp"
+
+
+class OTPDeliveryStatus(StrEnum):
+    """Where the code is on its way to the user, as reported by the provider.
+
+    Separate from OTPStatus: delivery never makes a code usable. Order:
+    pending -> accepted -> sent -> delivered -> read; failed is terminal.
+    unknown means the send timed out or broke after it may have reached the
+    provider, so nobody knows whether the message will arrive.
+    """
+
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    SENT = "sent"
+    DELIVERED = "delivered"
+    READ = "read"
+    FAILED = "failed"
+    UNKNOWN = "unknown"
+
+
 class OTPStatus(StrEnum):
     """Lifecycle status of an OTP challenge"""
 
@@ -47,6 +72,7 @@ class AuthEventType(StrEnum):
 
     OTP_REQUESTED = "otp_requested"
     OTP_REQUEST_BLOCKED = "otp_request_blocked"
+    OTP_DELIVERY_FAILED = "otp_delivery_failed"
     OTP_VERIFIED = "otp_verified"
     OTP_VERIFICATION_FAILED = "otp_verification_failed"
     OTP_EXPIRED = "otp_expired"
