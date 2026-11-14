@@ -58,6 +58,12 @@ from app.modules.gyms.exceptions import (
     GymVerificationRequirementsError,
     GymVerificationReviewInProgressError,
 )
+from app.modules.members.exceptions import (
+    GymMemberArchivedError,
+    GymMemberNotFoundError,
+    GymMemberPhoneTakenError,
+    InvalidMembershipPaymentError,
+)
 from app.modules.profiles.exceptions import (
     InvalidProfileUpdateError,
 )
@@ -653,6 +659,29 @@ async def gym_membership_plan_not_found_handler(
         code="MEMBERSHIP_PLAN_NOT_FOUND",
         message=str(exception),
     )
+
+
+_MEMBER_ERRORS: dict[type[Exception], tuple[int, str]] = {
+    GymMemberNotFoundError: (status.HTTP_404_NOT_FOUND, "MEMBER_NOT_FOUND"),
+    GymMemberPhoneTakenError: (status.HTTP_409_CONFLICT, "MEMBER_PHONE_TAKEN"),
+    GymMemberArchivedError: (status.HTTP_409_CONFLICT, "MEMBER_ARCHIVED"),
+    InvalidMembershipPaymentError: (
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "INVALID_MEMBERSHIP_PAYMENT",
+    ),
+}
+
+
+async def gym_member_error_handler(
+    _: Request,
+    exception: Exception,
+) -> JSONResponse:
+    """Return the client error for a gym-member failure."""
+
+    status_code, code = _MEMBER_ERRORS.get(
+        type(exception), (status.HTTP_400_BAD_REQUEST, "MEMBER_ERROR")
+    )
+    return error_response(status_code=status_code, code=code, message=str(exception))
 
 
 async def gym_already_exists_handler(

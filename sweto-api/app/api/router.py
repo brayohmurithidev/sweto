@@ -11,6 +11,7 @@ from app.modules.auth.whatsapp_webhook_router import (
     router as whatsapp_webhook_router,
 )
 from app.modules.gyms.router import router as gym_router
+from app.modules.members.router import router as member_router
 from app.modules.profiles.router import (
     account_router,
     profile_router,
@@ -28,6 +29,7 @@ api_router.include_router(whatsapp_webhook_router)
 api_router.include_router(account_router)
 api_router.include_router(profile_router)
 api_router.include_router(gym_router)
+api_router.include_router(member_router)
 if settings.app_environment in {"local", "development", "testing"}:
     from app.modules.gyms.dev_router import router as development_gym_router
 
