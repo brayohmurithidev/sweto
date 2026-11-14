@@ -119,10 +119,7 @@ void main() {
     testWidgets('sign-in screens are skipped', (tester) async {
       await pumpApp(tester, FakeAuthRepository(refreshToken: 'stored-refresh'));
 
-      for (final path in [
-        AppRoutes.phoneLoginPath,
-        AppRoutes.onboardingPath,
-      ]) {
+      for (final path in [AppRoutes.phoneLoginPath, AppRoutes.onboardingPath]) {
         await go(tester, path);
         expect(find.byType(PhoneLoginScreen), findsNothing, reason: path);
         expect(find.byType(AccountTypeScreen), findsOneWidget, reason: path);

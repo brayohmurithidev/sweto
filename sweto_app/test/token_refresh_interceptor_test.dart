@@ -24,7 +24,9 @@ void main() {
     dio = Dio(BaseOptions(baseUrl: 'http://api.test'))
       // Every first attempt at the protected endpoint is unauthorised.
       ..httpClientAdapter = _ScriptedAdapter(
-        responses: {'/protected': (_) => _json(401, {'error': 'expired'})},
+        responses: {
+          '/protected': (_) => _json(401, {'error': 'expired'}),
+        },
       )
       ..interceptors.add(
         TokenRefreshInterceptor(
@@ -46,12 +48,14 @@ void main() {
   test('refreshes, stores the new tokens and retries the request', () async {
     refreshAdapter.responses['/api/v1/auth/refresh'] = (_) => _json(200, {
       'data': {
-        'tokens': {'access_token': 'new-access', 'refresh_token': 'new-refresh'},
+        'tokens': {
+          'access_token': 'new-access',
+          'refresh_token': 'new-refresh',
+        },
       },
     });
-    refreshAdapter.responses['/protected'] = (options) => _json(200, {
-      'authorization': options.headers['Authorization'],
-    });
+    refreshAdapter.responses['/protected'] = (options) =>
+        _json(200, {'authorization': options.headers['Authorization']});
 
     final response = await callProtected();
 
@@ -112,15 +116,12 @@ void main() {
 
   test('retries with a token another request already refreshed', () async {
     storage.access = 'already-refreshed-access';
-    refreshAdapter.responses['/protected'] = (options) => _json(200, {
-      'authorization': options.headers['Authorization'],
-    });
+    refreshAdapter.responses['/protected'] = (options) =>
+        _json(200, {'authorization': options.headers['Authorization']});
 
     final response = await callProtected();
 
-    expect(response.data, {
-      'authorization': 'Bearer already-refreshed-access',
-    });
+    expect(response.data, {'authorization': 'Bearer already-refreshed-access'});
     expect(refreshAdapter.requestedPaths, ['/protected']);
   });
 }

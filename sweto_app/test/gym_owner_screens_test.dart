@@ -219,6 +219,7 @@ class _AuthFake implements AuthRepository {
   Future<void> logout(String refreshToken) async {
     revokedRefreshToken = refreshToken;
   }
+
   @override
   Future<OtpChallenge> requestOtp(String phoneNumber) =>
       throw UnimplementedError();

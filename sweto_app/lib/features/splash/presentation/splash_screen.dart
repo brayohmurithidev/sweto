@@ -42,9 +42,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
     // A signed-in user arriving here (after verifying an OTP, or redirected
     // away from a sign-in screen) is routed straight away. A cold start shows
     // the full splash while the stored session is checked.
-    final alreadySignedIn = ref
-        .read(sessionControllerProvider)
-        .isAuthenticated;
+    final alreadySignedIn = ref.read(sessionControllerProvider).isAuthenticated;
     _navigationTimer = Timer(
       alreadySignedIn ? Duration.zero : const Duration(milliseconds: 2600),
       _bootstrap,

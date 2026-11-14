@@ -159,8 +159,9 @@ class DioGymOwnerRepository implements GymOwnerRepository {
     );
     return _envelope(r.data, (d) {
       final values = d['photos'];
-      if (values is! List)
+      if (values is! List) {
         throw const FormatException('Invalid photo response.');
+      }
       return values.map((value) {
         final photo = _map(value);
         return GymPhoto(
@@ -211,8 +212,9 @@ class DioGymOwnerRepository implements GymOwnerRepository {
       ApiEndpoints.gymAmenities(gymId),
     );
     final raw = r.data?['data'];
-    if (raw is! List)
+    if (raw is! List) {
       throw const FormatException('Invalid gym amenities response.');
+    }
     return raw.map((value) {
       final item = _map(value);
       return GymAmenity(
@@ -240,8 +242,9 @@ class DioGymOwnerRepository implements GymOwnerRepository {
       ApiEndpoints.gymOperatingHours(gymId),
     );
     final raw = response.data?['data'];
-    if (raw is! List)
+    if (raw is! List) {
       throw const FormatException('Invalid operating hours response.');
+    }
     return raw.map((value) {
       final item = _map(value);
       return OperatingDay(
@@ -343,8 +346,9 @@ class DioGymOwnerRepository implements GymOwnerRepository {
       ApiEndpoints.gymVerification(gymId),
     );
     final data = response.data?['data'];
-    if (data is! Map)
+    if (data is! Map) {
       throw const FormatException('Invalid verification response.');
+    }
     final documents =
         (data['documents'] is List ? data['documents'] as List : const []).map((
           raw,

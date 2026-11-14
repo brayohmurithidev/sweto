@@ -86,9 +86,10 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
   }
 
   void _scheduleDeliveryCheck() {
-    final delay = _deliveryCheckDelays[_deliveryChecks
-        .clamp(0, _deliveryCheckDelays.length - 1)
-        .toInt()];
+    final delay =
+        _deliveryCheckDelays[_deliveryChecks
+            .clamp(0, _deliveryCheckDelays.length - 1)
+            .toInt()];
     _deliveryTimer = Timer(delay, _checkDelivery);
   }
 
@@ -166,7 +167,10 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
     try {
       final tokens = await ref
           .read(authRepositoryProvider)
-          .verifyOtp(challengeId: _challenge.challengeId, code: _controller.text);
+          .verifyOtp(
+            challengeId: _challenge.challengeId,
+            code: _controller.text,
+          );
       // Starting the session is all this screen does. The router then leaves
       // the sign-in flow and the splash screen resolves the destination.
       await ref.read(sessionControllerProvider.notifier).signIn(tokens);

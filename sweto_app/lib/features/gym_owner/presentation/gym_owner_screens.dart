@@ -329,11 +329,12 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
       _gymId = gym.id;
       await _uploadPendingPhotos(gym.id);
       if (_pendingPhotos.any((photo) => photo.status == _PhotoStatus.failed)) {
-        if (mounted)
+        if (mounted) {
           setState(
             () => _error =
                 'Some photos could not be uploaded. Retry them to continue.',
           );
+        }
         return;
       }
       final destination = await ref
@@ -375,8 +376,9 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
         final single = await _picker.pickImage(source: ImageSource.gallery);
         selected = single == null ? <XFile>[] : <XFile>[single];
       } on PlatformException {
-        if (mounted)
+        if (mounted) {
           _showPhotoMessage('Photo access is unavailable right now.');
+        }
         return;
       }
     }
@@ -456,17 +458,19 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
           bytes,
           mimeType: photo.mimeType,
           onProgress: (sent, total) {
-            if (mounted && total > 0)
+            if (mounted && total > 0) {
               setState(() => photo.progress = sent / total);
+            }
           },
         );
         if (mounted) setState(() => photo.status = _PhotoStatus.completing);
         await repository.completeGymPhotoUpload(gymId, intent.uploadId);
-        if (mounted)
+        if (mounted) {
           setState(() {
             photo.status = _PhotoStatus.uploaded;
             photo.progress = 1;
           });
+        }
       } catch (_) {
         if (mounted) setState(() => photo.status = _PhotoStatus.failed);
       }
@@ -485,10 +489,11 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
           .deleteGymPhoto(_gymId!, photo.id);
       await _loadPhotos(_gymId!);
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(
           () => _error = 'Unable to delete this photo. Please try again.',
         );
+      }
     }
   }
 
@@ -738,7 +743,7 @@ class _RemotePhotoTile extends StatelessWidget {
         Image.network(
           photo.url,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) =>
+          errorBuilder: (_, _, _) =>
               const Icon(Icons.image_not_supported_outlined),
         ),
         if (photo.isCover)
@@ -1225,16 +1230,10 @@ class GymOperatingHoursScreen extends ConsumerStatefulWidget {
 }
 
 class _OperatingDraft {
-  _OperatingDraft(
-    this.day, {
-    this.isClosed = true,
-    this.is24Hours = false,
-    this.open,
-    this.close,
-  });
+  _OperatingDraft(this.day);
   final int day;
-  bool isClosed;
-  bool is24Hours;
+  bool isClosed = true;
+  bool is24Hours = false;
   TimeOfDay? open;
   TimeOfDay? close;
 }
@@ -1799,8 +1798,9 @@ class _GymAmenitiesScreenState extends ConsumerState<GymAmenitiesScreen> {
                           icon: _iconFor(amenity),
                           selected: _selected.contains(amenity.id),
                           onTap: () => setState(() {
-                            if (!_selected.add(amenity.id))
+                            if (!_selected.add(amenity.id)) {
                               _selected.remove(amenity.id);
+                            }
                           }),
                         ),
                       ),
@@ -1938,11 +1938,12 @@ class _GymBusinessDetailsScreenState
         _loading = false;
       });
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _loading = false;
           _error = 'Unable to load business details.';
         });
+      }
     }
   }
 
@@ -2323,11 +2324,12 @@ class _GymLocationScreenState extends ConsumerState<GymLocationScreen> {
         _loading = false;
       });
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _loading = false;
           _error = 'Unable to load your gym location.';
         });
+      }
     }
   }
 
@@ -2357,12 +2359,13 @@ class _GymLocationScreenState extends ConsumerState<GymLocationScreen> {
       final position = await _locationService.getCurrentPosition();
       await _selectPosition(position.latitude, position.longitude);
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(
           () => _locationError = error is _LocationMessage
               ? error.message
               : 'We couldn’t find your location. Drag the map to your gym instead.',
         );
+      }
     } finally {
       if (mounted) setState(() => _locating = false);
     }
@@ -2386,16 +2389,18 @@ class _GymLocationScreenState extends ConsumerState<GymLocationScreen> {
       if (!mounted || address == null) return;
       setState(() {
         if (_address.text.trim().isEmpty) _address.text = address.addressLine;
-        if (_neighbourhood.text.trim().isEmpty)
+        if (_neighbourhood.text.trim().isEmpty) {
           _neighbourhood.text = address.neighbourhood;
+        }
         if (_county.text.trim().isEmpty) _county.text = address.city;
       });
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(
           () => _geocodingWarning =
               'Address lookup unavailable. Enter the details manually.',
         );
+      }
     } finally {
       if (mounted) setState(() => _reverseGeocoding = false);
     }
@@ -2650,45 +2655,6 @@ class _GymLocationScreenState extends ConsumerState<GymLocationScreen> {
 class _LocationMessage implements Exception {
   const _LocationMessage(this.message);
   final String message;
-}
-
-class _LocationMapPreview extends StatelessWidget {
-  const _LocationMapPreview({
-    required this.latitude,
-    required this.longitude,
-    required this.onTap,
-  });
-  final double latitude;
-  final double longitude;
-  final void Function(double latitude, double longitude) onTap;
-  @override
-  Widget build(BuildContext context) => GestureDetector(
-    key: const Key('location-map'),
-    onTapDown: (details) {
-      final box = context.findRenderObject()! as RenderBox;
-      final point = details.localPosition;
-      onTap(
-        -4 + (1 - point.dy / box.size.height) * 8,
-        33 + point.dx / box.size.width * 9,
-      );
-    },
-    child: Container(
-      height: 190,
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: const Color(0xFF202A25),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          const Icon(Icons.map_outlined, size: 82, color: Color(0xFF3E5148)),
-          const Icon(Icons.location_pin, size: 46, color: AppColors.primary),
-        ],
-      ),
-    ),
-  );
 }
 
 class SimpleOnboardingPlaceholder extends StatelessWidget {
@@ -2965,8 +2931,9 @@ class _GymVerificationSetupScreenState
     if (_submitting ||
         _gymId == null ||
         _data == null ||
-        _data!.missingTypes.isNotEmpty)
+        _data!.missingTypes.isNotEmpty) {
       return;
+    }
     final confirmed = await showSwetoConfirmationDialog(
       context,
       title: 'Submit gym for review?',
@@ -3055,12 +3022,13 @@ class _GymVerificationSetupScreenState
         ),
       ),
     );
-    if (result != null && mounted)
+    if (result != null && mounted) {
       setState(() {
         _selectedType = result;
         _selectedFileName = null;
         _selectedFile = null;
       });
+    }
   }
 
   Future<void> _replaceDocument(VerificationDocument document) async {
@@ -3099,16 +3067,18 @@ class _GymVerificationSetupScreenState
         });
       }
     } on PlatformException {
-      if (mounted)
+      if (mounted) {
         setState(() => _error = 'Photo access is unavailable right now.');
+      }
     } catch (error) {
       if (kDebugMode) {
         debugPrint('Verification document picker failed: ${error.runtimeType}');
       }
-      if (mounted)
+      if (mounted) {
         setState(
           () => _error = 'We couldn’t choose that file. Please try again.',
         );
+      }
     } finally {
       if (mounted) setState(() => _pickingFile = false);
     }
@@ -3183,8 +3153,9 @@ class _GymVerificationSetupScreenState
         return 'Your session expired. Please sign in again.';
       }
       if (status == 413) return 'The selected file is too large.';
-      if (status == 422)
+      if (status == 422) {
         return 'This file cannot be uploaded. Check its type and size.';
+      }
       if (error.type == DioExceptionType.connectionTimeout ||
           error.type == DioExceptionType.sendTimeout ||
           error.type == DioExceptionType.receiveTimeout) {

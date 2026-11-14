@@ -93,7 +93,10 @@ void main() {
     });
 
     test('public routes are allowed', () {
-      expect(sessionRedirect(SessionStatus.unknown, AppRoutes.splashPath), isNull);
+      expect(
+        sessionRedirect(SessionStatus.unknown, AppRoutes.splashPath),
+        isNull,
+      );
       expect(
         sessionRedirect(SessionStatus.unknown, AppRoutes.phoneLoginPath),
         isNull,
