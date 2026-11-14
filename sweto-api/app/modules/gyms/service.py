@@ -351,6 +351,7 @@ class GymService:
             neighbourhood=gym.neighbourhood,
             city=gym.city,
             country_code=gym.country_code,
+            timezone=gym.timezone,
             latitude=gym.latitude,
             longitude=gym.longitude,
             logo_url=gym.logo_url,
