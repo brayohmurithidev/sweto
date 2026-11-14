@@ -63,13 +63,23 @@ class FakeAuthRepository implements AuthRepository {
     required String code,
   }) async => issuedTokens;
 
+  /// E.164 numbers passed to [requestOtp], in order.
+  final List<String> requestedPhoneNumbers = [];
+
+  /// Mirrors the API's channel policy: SMS in Kenya, WhatsApp elsewhere.
   @override
-  Future<OtpChallenge> requestOtp(String phoneNumber) async => OtpChallenge(
-    challengeId: 'challenge',
-    phoneNumber: phoneNumber,
-    expiresAt: DateTime.now().add(const Duration(minutes: 5)),
-    resendAvailableAt: DateTime.now().add(const Duration(seconds: 60)),
-  );
+  Future<OtpChallenge> requestOtp(String phoneNumber) async {
+    requestedPhoneNumbers.add(phoneNumber);
+    return OtpChallenge(
+      challengeId: 'challenge',
+      phoneNumber: phoneNumber,
+      expiresAt: DateTime.now().add(const Duration(minutes: 5)),
+      resendAvailableAt: DateTime.now().add(const Duration(seconds: 60)),
+      deliveryChannel: phoneNumber.startsWith('+254')
+          ? OtpDeliveryChannel.sms
+          : OtpDeliveryChannel.whatsapp,
+    );
+  }
 
   @override
   Future<AuthUser> getMe() async =>

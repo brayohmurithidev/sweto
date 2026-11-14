@@ -6,6 +6,9 @@ class ApiEndpoints {
   static const passwordLogin = '/api/v1/auth/password/login';
   static const requestOtp = '/api/v1/auth/request-otp';
   static const verifyOtp = '/api/v1/auth/verify-otp';
+  static const phoneCountries = '/api/v1/auth/phone-countries';
+  static String otpDelivery(String challengeId) =>
+      '/api/v1/auth/otp-challenges/$challengeId/delivery';
 
   static const refreshToken = '/api/v1/auth/refresh';
   static const logout = '/api/v1/auth/logout';

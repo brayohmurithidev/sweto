@@ -24,6 +24,7 @@ class DioAuthRepository implements AuthRepository {
         phoneNumber: _string(data, 'phone_number'),
         expiresAt: DateTime.parse(_string(data, 'expires_at')),
         resendAvailableAt: DateTime.parse(_string(data, 'resend_available_at')),
+        deliveryChannel: OtpDeliveryChannel.fromApi(data['delivery_channel']),
       ),
     );
   }
