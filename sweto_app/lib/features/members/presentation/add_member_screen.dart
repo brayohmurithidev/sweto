@@ -43,6 +43,8 @@ class _AddMemberScreenState extends ConsumerState<AddMemberScreen> {
   bool _saving = false;
 
   List<GymPricingPlan>? _plans;
+  String? _gymName;
+  bool _smsConsent = false;
   bool _recordPayment = true;
   GymPricingPlan? _plan;
   int? _amount;
@@ -57,6 +59,16 @@ class _AddMemberScreenState extends ConsumerState<AddMemberScreen> {
   void initState() {
     super.initState();
     _loadPlans();
+    _loadGymName();
+  }
+
+  Future<void> _loadGymName() async {
+    try {
+      final gym = await ref.read(gymOwnerRepositoryProvider).getCurrentGym();
+      if (mounted) setState(() => _gymName = gym.name);
+    } catch (_) {
+      // The consent line falls back to "your gym".
+    }
   }
 
   @override
@@ -128,6 +140,7 @@ class _AddMemberScreenState extends ConsumerState<AddMemberScreen> {
         widget.gymId,
         fullName: _name.text.trim(),
         phoneNumber: PhoneNumbers.toE164(_country, _phone.text.trim()),
+        smsConsent: _smsConsent,
       );
     } catch (error) {
       if (!mounted) return;
@@ -139,9 +152,10 @@ class _AddMemberScreenState extends ConsumerState<AddMemberScreen> {
     }
 
     String? paymentError;
+    String? smsStatus;
     if (_recordPayment) {
       try {
-        await repository.recordCashPayment(
+        final detail = await repository.recordCashPayment(
           widget.gymId,
           member.id,
           CashPaymentInput(
@@ -150,6 +164,7 @@ class _AddMemberScreenState extends ConsumerState<AddMemberScreen> {
             startsOn: _startedOn == _today ? null : _startedOn,
           ),
         );
+        smsStatus = detail.smsStatus;
       } catch (error) {
         paymentError = memberErrorMessage(error);
       }
@@ -157,9 +172,14 @@ class _AddMemberScreenState extends ConsumerState<AddMemberScreen> {
     if (!mounted) return;
     showSwetoSnackBar(
       context,
-      message: paymentError == null
-          ? '${member.fullName} added.'
-          : 'Member added, but the payment wasn\'t saved: $paymentError',
+      message: paymentError != null
+          ? 'Member added, but the payment wasn\'t saved: $paymentError'
+          : switch (smsStatus) {
+              'sent' => '${member.fullName} added. Welcome SMS sent.',
+              'failed' =>
+                '${member.fullName} added. The welcome SMS couldn\'t be sent.',
+              _ => '${member.fullName} added.',
+            },
       type: paymentError == null
           ? SwetoSnackBarType.success
           : SwetoSnackBarType.warning,
@@ -186,6 +206,9 @@ class _AddMemberScreenState extends ConsumerState<AddMemberScreen> {
               key: const Key('member-name-field'),
               controller: _name,
               textCapitalization: TextCapitalization.words,
+              // Autocorrect "fixes" names (Njeri -> Nehru).
+              autocorrect: false,
+              enableSuggestions: false,
               decoration: _decoration('Full name', _nameError),
               onChanged: (_) => setState(() => _nameError = null),
             ),
@@ -203,6 +226,22 @@ class _AddMemberScreenState extends ConsumerState<AddMemberScreen> {
               focusNode: _phoneFocus,
               errorText: _phoneError,
               onChanged: (_) => setState(() => _phoneError = null),
+            ),
+            CheckboxListTile(
+              key: const Key('member-sms-consent'),
+              contentPadding: EdgeInsets.zero,
+              controlAffinity: ListTileControlAffinity.leading,
+              value: _smsConsent,
+              onChanged: (value) =>
+                  setState(() => _smsConsent = value ?? false),
+              title: Text(
+                'Member agreed to receive SMS from ${_gymName ?? 'your gym'}',
+              ),
+              subtitle: Text(
+                'Welcome with their check-in code, receipts and expiry '
+                'reminders. Leave unticked if they didn\'t agree.',
+                style: AppTextStyles.bodySmall,
+              ),
             ),
             const SizedBox(height: AppSpacing.md),
             if (plans == null)

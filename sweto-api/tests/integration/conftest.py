@@ -78,6 +78,7 @@ class RecordingSMSProvider:
     """OTP provider double (SMS or WhatsApp) that records codes or fails."""
 
     sent: list[tuple[str, str]] = field(default_factory=list)
+    texts: list[tuple[str, str]] = field(default_factory=list)
     failure: Exception | None = None
     delay_seconds: float = 0
 
@@ -96,6 +97,12 @@ class RecordingSMSProvider:
             raise self.failure
         self.sent.append((phone_number, otp_code))
         return self.last_message_id()
+
+    async def send_text(self, *, phone_number: str, message: str) -> str | None:
+        if self.failure is not None:
+            raise self.failure
+        self.texts.append((phone_number, message))
+        return f"text-{len(self.texts)}"
 
     def last_message_id(self) -> str:
         """Provider message ID of the last send, like a WhatsApp wamid."""

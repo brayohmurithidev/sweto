@@ -70,14 +70,18 @@ Future<bool> showSwetoConfirmationDialog(
                     ),
                   ),
                   const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
+                  // Stacks the buttons when long labels don't fit side by
+                  // side, instead of overflowing.
+                  OverflowBar(
+                    alignment: MainAxisAlignment.end,
+                    overflowAlignment: OverflowBarAlignment.end,
+                    spacing: 8,
+                    overflowSpacing: 4,
                     children: [
                       TextButton(
                         onPressed: () => Navigator.of(context).pop(false),
                         child: Text(cancelLabel),
                       ),
-                      const SizedBox(width: 8),
                       FilledButton(
                         style: FilledButton.styleFrom(
                           backgroundColor: accent,

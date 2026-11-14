@@ -44,6 +44,10 @@ class FakeMembers implements MembersRepository {
   final members = <GymMember>[];
   final listCalls = <(MemberStanding?, String?)>[];
   final added = <(String, String)>[];
+  final consents = <bool>[];
+  final smsChanges = <(String, bool)>[];
+  String? paymentSms;
+  String? codeSms;
   final payments = <(String, CashPaymentInput)>[];
   Object? addError;
   Object? paymentError;
@@ -77,9 +81,11 @@ class FakeMembers implements MembersRepository {
     String gymId, {
     required String fullName,
     required String phoneNumber,
+    bool smsConsent = false,
   }) async {
     if (addError != null) throw addError!;
     added.add((fullName, phoneNumber));
+    consents.add(smsConsent);
     final member = fakeMember(
       'm-new',
       fullName,
@@ -128,9 +134,10 @@ class FakeMembers implements MembersRepository {
       paidUntil: m.paidUntil,
       hasCheckInCode: true,
     );
-    return const CheckInCode(
+    return CheckInCode(
       code: '7KQ2-M9XD',
       qrPayload: 'sweto:checkin:7KQ2M9XD',
+      smsStatus: codeSms,
     );
   }
 
@@ -143,6 +150,28 @@ class FakeMembers implements MembersRepository {
 
   @override
   Future<CheckInDay> checkInsToday(String gymId) async => today;
+
+  @override
+  Future<GymMember> setSms(
+    String gymId,
+    String memberId, {
+    required bool enabled,
+  }) async {
+    smsChanges.add((memberId, enabled));
+    final index = members.indexWhere((m) => m.id == memberId);
+    final m = members[index];
+    members[index] = GymMember(
+      id: m.id,
+      fullName: m.fullName,
+      phoneNumber: m.phoneNumber,
+      status: m.status,
+      standing: m.standing,
+      paidUntil: m.paidUntil,
+      hasCheckInCode: m.hasCheckInCode,
+      smsEnabled: enabled,
+    );
+    return members[index];
+  }
 
   @override
   Future<GymMember> setArchived(
@@ -161,11 +190,20 @@ class FakeMembers implements MembersRepository {
     payments.add((memberId, input));
     final index = members.indexWhere((m) => m.id == memberId);
     members[index] = fakeMember(memberId, members[index].fullName);
-    return getMember(gymId, memberId);
+    final detail = await getMember(gymId, memberId);
+    return MemberDetail(
+      member: detail.member,
+      memberships: detail.memberships,
+      smsStatus: paymentSms,
+    );
   }
 }
 
 class _FakePricing extends Fake implements GymOwnerRepository {
+  @override
+  Future<Gym> getCurrentGym() async =>
+      const Gym(id: _gymId, name: 'FlexFit Westlands');
+
   @override
   Future<GymPricing> getGymPricing(String gymId) async => const GymPricing(
     membershipPlans: [
@@ -518,6 +556,108 @@ void main() {
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(repo.issuedCodes, ['1']);
+    });
+  });
+
+  group('member SMS', () {
+    testWidgets('consent is unticked by default and sent when ticked', (
+      tester,
+    ) async {
+      final repo = FakeMembers()..paymentSms = 'sent';
+      await _pump(tester, repo, location: '/gyms/$_gymId/members');
+      await tester.tap(find.byKey(const Key('add-member-button')));
+      await tester.pumpAndSettle();
+
+      final consent = find.byKey(const Key('member-sms-consent'));
+      expect(tester.widget<CheckboxListTile>(consent).value, isFalse);
+      expect(
+        find.text('Member agreed to receive SMS from FlexFit Westlands'),
+        findsOneWidget,
+      );
+
+      await tester.enterText(
+        find.byKey(const Key('member-name-field')),
+        'Achieng Otieno',
+      );
+      await tester.enterText(
+        find.byKey(const Key('member-phone-input')),
+        '0711000001',
+      );
+      await tester.tap(consent);
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('add-member-submit')));
+      await tester.pump();
+
+      expect(repo.consents, [true]);
+      // Shown while the add screen closes and the member opens.
+      expect(
+        find.text('Achieng Otieno added. Welcome SMS sent.'),
+        findsWidgets,
+      );
+    });
+
+    testWidgets('turning SMS on needs confirmation; off does not', (
+      tester,
+    ) async {
+      final repo = FakeMembers()
+        ..members.add(fakeMember('1', 'Achieng Otieno'));
+      await _pump(tester, repo, location: '/gyms/$_gymId/members/1');
+      expect(
+        find.text('No consent recorded. No SMS are sent.'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('member-sms-switch')));
+      await tester.pumpAndSettle();
+      expect(find.text('Turn on SMS?'), findsOneWidget);
+      await tester.tap(find.text('They agreed'));
+      await tester.pumpAndSettle();
+      expect(repo.smsChanges, [('1', true)]);
+      expect(
+        find.text('Code, receipts and expiry reminders by SMS.'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byKey(const Key('member-sms-switch')));
+      await tester.pumpAndSettle();
+      expect(find.text('Turn on SMS?'), findsNothing);
+      expect(repo.smsChanges.last, ('1', false));
+    });
+
+    testWidgets('the code dialog says when the code was texted', (
+      tester,
+    ) async {
+      final repo = FakeMembers()
+        ..codeSms = 'sent'
+        ..members.add(fakeMember('1', 'Achieng Otieno'));
+      await _pump(tester, repo, location: '/gyms/$_gymId/members/1');
+
+      await tester.tap(find.byKey(const Key('issue-check-in-code')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Also sent to the member by SMS.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a failed receipt SMS is reported after a payment', (
+      tester,
+    ) async {
+      final repo = FakeMembers()
+        ..paymentSms = 'failed'
+        ..members.add(fakeMember('1', 'Achieng Otieno'));
+      await _pump(tester, repo, location: '/gyms/$_gymId/members/1');
+
+      await tester.tap(find.byKey(const Key('record-cash-button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('cash-payment-submit')));
+      await tester.pump();
+
+      expect(
+        find.textContaining("The SMS receipt couldn't be sent."),
+        findsOneWidget,
+      );
     });
   });
 }

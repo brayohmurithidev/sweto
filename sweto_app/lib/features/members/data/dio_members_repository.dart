@@ -41,10 +41,28 @@ class DioMembersRepository implements MembersRepository {
     String gymId, {
     required String fullName,
     required String phoneNumber,
+    bool smsConsent = false,
   }) async {
     final r = await _dio.post<Map<String, dynamic>>(
       ApiEndpoints.gymMembers(gymId),
-      data: {'full_name': fullName, 'phone_number': phoneNumber},
+      data: {
+        'full_name': fullName,
+        'phone_number': phoneNumber,
+        'sms_consent': smsConsent,
+      },
+    );
+    return _member(_data(r.data));
+  }
+
+  @override
+  Future<GymMember> setSms(
+    String gymId,
+    String memberId, {
+    required bool enabled,
+  }) async {
+    final r = await _dio.put<Map<String, dynamic>>(
+      '${ApiEndpoints.gymMember(gymId, memberId)}/sms',
+      data: {'enabled': enabled},
     );
     return _member(_data(r.data));
   }
@@ -76,7 +94,7 @@ class DioMembersRepository implements MembersRepository {
     String memberId,
     CashPaymentInput input,
   ) async {
-    await _dio.post<Map<String, dynamic>>(
+    final r = await _dio.post<Map<String, dynamic>>(
       ApiEndpoints.gymMemberCashPayment(gymId, memberId),
       data: {
         'plan_id': input.planId,
@@ -84,7 +102,13 @@ class DioMembersRepository implements MembersRepository {
         if (input.startsOn != null) 'starts_on': _isoDate(input.startsOn!),
       },
     );
-    return getMember(gymId, memberId);
+    final sms = _data(r.data)['sms'] as String?;
+    final detail = await getMember(gymId, memberId);
+    return MemberDetail(
+      member: detail.member,
+      memberships: detail.memberships,
+      smsStatus: sms,
+    );
   }
 
   @override
@@ -96,6 +120,7 @@ class DioMembersRepository implements MembersRepository {
     return CheckInCode(
       code: _string(d, 'code'),
       qrPayload: _string(d, 'qr_payload'),
+      smsStatus: d['sms'] as String?,
     );
   }
 
@@ -161,6 +186,8 @@ class DioMembersRepository implements MembersRepository {
     standing: MemberStanding.fromApi(d['standing'] as String?),
     paidUntil: _date(d['paid_until']),
     hasCheckInCode: d['has_check_in_code'] == true,
+    smsEnabled: d['sms_enabled'] == true,
+    smsOptedOutAt: DateTime.tryParse('${d['sms_opted_out_at']}')?.toLocal(),
   );
 
   GymMembership _membership(Map<String, dynamic> d) => GymMembership(

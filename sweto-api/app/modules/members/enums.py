@@ -40,6 +40,20 @@ class CheckInResult(StrEnum):
     UNKNOWN_CODE = "unknown_code"
 
 
+class MemberMessageKind(StrEnum):
+    WELCOME = "welcome"
+    PAYMENT_RECEIPT = "payment_receipt"
+    CHECK_IN_CODE = "check_in_code"
+    EXPIRY_REMINDER_3_DAYS = "expiry_reminder_3_days"
+    EXPIRY_REMINDER_TODAY = "expiry_reminder_today"
+
+
+class MemberMessageStatus(StrEnum):
+    PENDING = "pending"
+    SENT = "sent"
+    FAILED = "failed"
+
+
 class PaymentMethod(StrEnum):
     CASH = "cash"
     MPESA = "mpesa"

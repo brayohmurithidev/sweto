@@ -116,12 +116,21 @@ class AfricasTalkingSMSProvider:
         otp_code: str,
         expires_in_seconds: int,
     ) -> str | None:
+        return await self._send(
+            phone_number,
+            render_otp_message(
+                otp_code=otp_code, expires_in_seconds=expires_in_seconds
+            ),
+        )
+
+    async def send_text(self, *, phone_number: str, message: str) -> str | None:
+        return await self._send(phone_number, message)
+
+    async def _send(self, phone_number: str, message: str) -> str | None:
         form = {
             "username": self._config.username,
             "to": phone_number,
-            "message": render_otp_message(
-                otp_code=otp_code, expires_in_seconds=expires_in_seconds
-            ),
+            "message": message,
             "bulkSMSMode": "1",
         }
         if self._config.sender_id:

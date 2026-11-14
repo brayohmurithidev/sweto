@@ -52,8 +52,18 @@ Future<void> showCheckInCodeDialog(
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
-            'Let the member photograph this now, or note the code. '
-            'It won\'t be shown again; issuing a new code replaces it.',
+            switch (code.smsStatus) {
+              'sent' =>
+                'Also sent to the member by SMS. It won\'t be shown here '
+                    'again; issuing a new code replaces it.',
+              'failed' =>
+                'The SMS couldn\'t be sent, so let the member photograph '
+                    'this now. It won\'t be shown again.',
+              _ =>
+                'Let the member photograph this now, or note the code. '
+                    'It won\'t be shown again; issuing a new code replaces it.',
+            },
+            key: const Key('check-in-code-note'),
             textAlign: TextAlign.center,
             style: AppTextStyles.bodySmall,
           ),

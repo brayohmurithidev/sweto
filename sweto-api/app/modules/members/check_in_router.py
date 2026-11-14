@@ -7,8 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.database.session import get_db_session
+from app.integrations.sms.base import SMSProvider
+from app.integrations.sms.dependencies import get_sms_provider
 from app.modules.auth.dependencies import CurrentUser
 from app.modules.members.check_in_service import CheckInService
+from app.modules.members.notifier import MemberNotifier
 from app.modules.members.schemas import (
     CheckInCodeData,
     CheckInData,
@@ -29,10 +32,28 @@ Limiter = Annotated[RateLimiter, Depends(get_rate_limiter)]
 
 
 def _service(
-    session: AsyncSession, clock: Clock, settings: Settings, limiter: RateLimiter
+    session: AsyncSession,
+    clock: Clock,
+    settings: Settings,
+    limiter: RateLimiter,
+    sms: SMSProvider | None = None,
 ) -> CheckInService:
+    notifier = (
+        None
+        if sms is None
+        else MemberNotifier(
+            session=session,
+            sms=sms,
+            clock=clock,
+            timeout_seconds=settings.sms_send_timeout_seconds,
+        )
+    )
     return CheckInService(
-        session=session, clock=clock, settings=settings, rate_limiter=limiter
+        session=session,
+        clock=clock,
+        settings=settings,
+        rate_limiter=limiter,
+        notifier=notifier,
     )
 
 
@@ -49,10 +70,12 @@ async def issue_check_in_code(
     clock: CurrentClock,
     settings: ApplicationSettings,
     limiter: Limiter,
+    sms: Annotated[SMSProvider, Depends(get_sms_provider)],
 ) -> APIResponse[CheckInCodeData]:
-    """Issue a new check-in code. It is returned once; the old one stops working."""
+    """Issue a new check-in code, returned once and texted to the member if
+    they agreed to SMS. The old code stops working."""
 
-    data = await _service(session, clock, settings, limiter).issue_code(
+    data = await _service(session, clock, settings, limiter, sms).issue_code(
         user_id=current_user.id, gym_id=gym_id, member_id=member_id
     )
     return APIResponse(data=data)

@@ -29,6 +29,8 @@ class GymMember {
     required this.standing,
     this.paidUntil,
     this.hasCheckInCode = false,
+    this.smsEnabled = false,
+    this.smsOptedOutAt,
   });
 
   final String id;
@@ -42,6 +44,10 @@ class GymMember {
 
   /// Whether a check-in code has been issued (the code itself is never kept).
   final bool hasCheckInCode;
+
+  /// Staff recorded the member's consent and they haven't opted out.
+  final bool smsEnabled;
+  final DateTime? smsOptedOutAt;
 
   bool get isArchived => status == MemberStatus.archived;
 }
@@ -91,9 +97,17 @@ class GymMembership {
 }
 
 class MemberDetail {
-  const MemberDetail({required this.member, required this.memberships});
+  const MemberDetail({
+    required this.member,
+    required this.memberships,
+    this.smsStatus,
+  });
   final GymMember member;
   final List<GymMembership> memberships;
+
+  /// After recording a payment: "sent", "failed", or null when no SMS was
+  /// due (no consent, opted out).
+  final String? smsStatus;
 }
 
 class CashPaymentInput {
@@ -109,11 +123,18 @@ class CashPaymentInput {
 
 /// A freshly issued check-in code. Shown once; only a hash is stored.
 class CheckInCode {
-  const CheckInCode({required this.code, required this.qrPayload});
+  const CheckInCode({
+    required this.code,
+    required this.qrPayload,
+    this.smsStatus,
+  });
 
   /// Display form, e.g. "7KQ2-M9XD".
   final String code;
   final String qrPayload;
+
+  /// "sent", "failed", or null when the member gets no SMS.
+  final String? smsStatus;
 }
 
 enum CheckInResult {

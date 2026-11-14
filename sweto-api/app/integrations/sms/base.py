@@ -22,3 +22,11 @@ class SMSProvider(OTPSender, Protocol):
     - Never log the OTP code or provider credentials.
     - Respect cancellation: the caller enforces an overall timeout.
     """
+
+    async def send_text(self, *, phone_number: str, message: str) -> str | None:
+        """Send a plain message (member notices, not sign-in codes).
+
+        Same contract as ``send_otp``: the provider's message ID or None on
+        acceptance, SMSDeliveryError for any failure.
+        """
+        ...
