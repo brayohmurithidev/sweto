@@ -60,10 +60,7 @@ void main() {
   });
 
   testWidgets('a delivered WhatsApp code shows no warning', (tester) async {
-    final delivery = await pumpWhatsAppOtp(
-      tester,
-      OtpDeliveryStatus.delivered,
-    );
+    final delivery = await pumpWhatsAppOtp(tester, OtpDeliveryStatus.delivered);
 
     await tester.pump(const Duration(seconds: 4));
     await tester.pump();

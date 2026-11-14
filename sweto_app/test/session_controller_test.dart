@@ -39,10 +39,7 @@ void main() {
       createContainer(FakeAuthRepository(refreshToken: 'stored-refresh'));
 
       expect(await controller().restore(), SessionStatus.authenticated);
-      expect(
-        auth.refreshToken,
-        FakeAuthRepository.issuedTokens.refreshToken,
-      );
+      expect(auth.refreshToken, FakeAuthRepository.issuedTokens.refreshToken);
     });
 
     test('a rejected session is cleared and marked expired', () async {
