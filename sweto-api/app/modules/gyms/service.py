@@ -108,6 +108,7 @@ from app.modules.gyms.schemas import (
     UpdateGymPricingRequest,
 )
 from app.modules.gyms.slug import slugify
+from app.modules.gyms.timezones import timezone_for_country
 from app.modules.profiles.enums import (
     AccountRole,
     OnboardingStatus,
@@ -491,6 +492,9 @@ class GymService:
         gym.neighbourhood = payload.neighbourhood.strip()
         gym.city = payload.city.strip()
         gym.country_code = payload.country_code.upper()
+        timezone = timezone_for_country(gym.country_code)
+        if timezone is not None:
+            gym.timezone = timezone
         gym.latitude = payload.latitude
         gym.longitude = payload.longitude
 

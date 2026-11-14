@@ -11,6 +11,7 @@ from app.modules.gyms.models import (
     GymVerificationDocument,
     GymVerificationReview,
 )
+from app.modules.members.models import GymMember, GymMembership, Payment
 from app.modules.profiles.models import (
     UserAccountRole,
     UserProfile,
@@ -22,12 +23,15 @@ __all__ = [
     "AuthEvent",
     "Gym",
     "GymAmenity",
+    "GymMember",
+    "GymMembership",
     "GymOperatingHours",
     "GymPhoto",
     "GymStaff",
     "GymVerificationDocument",
     "GymVerificationReview",
     "OTPChallenge",
+    "Payment",
     "RefreshSession",
     "User",
     "UserAccountRole",
