@@ -6,6 +6,10 @@ class GymDayPassNotFoundError(GymError):
     """Raised when pricing refers to a day pass this gym does not have."""
 
 
+class GymMembershipPlanNotFoundError(GymError):
+    """Raised when pricing refers to a membership plan this gym does not have."""
+
+
 class GymPhotoUploadInvalidError(GymError):
     """Raised when gym-photo upload metadata is invalid."""
 

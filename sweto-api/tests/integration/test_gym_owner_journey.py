@@ -560,3 +560,159 @@ async def test_pricing_rejects_the_same_day_pass_twice(
         ],
     )
     assert response.status_code == 422
+
+
+async def plans(owner: Owner, gym_id: str) -> dict[str, dict[str, Any]]:
+    response = await owner.call("GET", f"/gyms/{gym_id}/pricing")
+    assert response.status_code == 200, response.json()
+    data = response.json()["data"]["membership_plans"]
+    return {item["name"]: item for item in data}
+
+
+async def put_plans(owner: Owner, gym_id: str, items: list[dict[str, Any]]) -> Any:
+    return await owner.call(
+        "PUT",
+        f"/gyms/{gym_id}/pricing",
+        json={
+            "day_passes": [{"name": "Day Pass", "amount": "500.00"}],
+            "membership_plans": items,
+        },
+    )
+
+
+def monthly(**overrides: Any) -> dict[str, Any]:
+    return {
+        "name": "Monthly",
+        "amount": "5000.00",
+        "billing_period": "monthly",
+        "benefits": [{"name": "Gym floor"}, {"name": "Classes"}],
+        **overrides,
+    }
+
+
+async def test_editing_a_plan_keeps_its_id_and_benefits(
+    api: IntegrationAPI, storage: FakeStorage
+) -> None:
+    """Memberships will point at plans, so an edit must not re-create them."""
+    owner = await sign_in_owner(api)
+    gym_id = await complete_profile(owner, storage)
+    response = await put_plans(owner, gym_id, [monthly()])
+    assert response.status_code == 200, response.json()
+    original = (await plans(owner, gym_id))["Monthly"]
+    benefit_ids = {b["name"]: b["id"] for b in original["benefits"]}
+
+    # The app sends no IDs: matching by name keeps the plan, and unchanged
+    # benefits keep theirs.
+    response = await put_plans(
+        owner,
+        gym_id,
+        [
+            monthly(
+                name="monthly",
+                amount="5500.00",
+                benefits=[{"name": "Classes"}, {"name": "Sauna"}],
+            )
+        ],
+    )
+    assert response.status_code == 200, response.json()
+    updated = (await plans(owner, gym_id))["monthly"]
+    assert updated["id"] == original["id"]
+    assert updated["amount"] == "5500.00"
+    benefits = {b["name"]: b["id"] for b in updated["benefits"]}
+    assert set(benefits) == {"Classes", "Sauna"}
+    assert benefits["Classes"] == benefit_ids["Classes"]
+
+    # With an ID, a rename keeps the plan too; a new name adds a plan.
+    response = await put_plans(
+        owner,
+        gym_id,
+        [
+            monthly(id=original["id"], name="Monthly Unlimited"),
+            monthly(name="Quarterly", billing_period="quarterly", amount="14000"),
+        ],
+    )
+    assert response.status_code == 200, response.json()
+    current = await plans(owner, gym_id)
+    assert current["Monthly Unlimited"]["id"] == original["id"]
+    assert current["Quarterly"]["id"] != original["id"]
+
+    # Plans left out are removed; the others keep their IDs.
+    quarterly_id = current["Quarterly"]["id"]
+    response = await put_plans(
+        owner,
+        gym_id,
+        [monthly(name="Quarterly", billing_period="quarterly", amount="15000")],
+    )
+    assert response.status_code == 200, response.json()
+    current = await plans(owner, gym_id)
+    assert list(current) == ["Quarterly"]
+    assert current["Quarterly"]["id"] == quarterly_id
+
+
+async def test_a_removed_plan_name_can_be_reused_by_a_renamed_plan(
+    api: IntegrationAPI, storage: FakeStorage
+) -> None:
+    owner = await sign_in_owner(api)
+    gym_id = await complete_profile(owner, storage)
+    response = await put_plans(
+        owner,
+        gym_id,
+        [monthly(), monthly(name="Annual", billing_period="annual", amount="50000")],
+    )
+    assert response.status_code == 200, response.json()
+    annual_id = (await plans(owner, gym_id))["Annual"]["id"]
+
+    # "Monthly" is removed and "Annual" takes its name in the same request.
+    response = await put_plans(owner, gym_id, [monthly(id=annual_id)])
+    assert response.status_code == 200, response.json()
+    current = await plans(owner, gym_id)
+    assert list(current) == ["Monthly"]
+    assert current["Monthly"]["id"] == annual_id
+
+
+async def test_pricing_rejects_unknown_or_foreign_plan_ids(
+    api: IntegrationAPI, storage: FakeStorage
+) -> None:
+    owner = await sign_in_owner(api)
+    gym_id = await complete_profile(owner, storage)
+    assert (await put_plans(owner, gym_id, [monthly()])).status_code == 200
+    other_owner = await sign_in_owner(api, phone="0733000000")
+    other_gym_id = await complete_profile(other_owner, storage)
+    assert (await put_plans(other_owner, other_gym_id, [monthly()])).status_code == 200
+    foreign_id = (await plans(other_owner, other_gym_id))["Monthly"]["id"]
+
+    for unknown in ["00000000-0000-0000-0000-000000000000", foreign_id]:
+        response = await put_plans(owner, gym_id, [monthly(id=unknown, name="Hijack")])
+        assert response.status_code == 422, response.json()
+        assert response.json()["error"]["code"] == "MEMBERSHIP_PLAN_NOT_FOUND"
+
+    # Nothing changed for either gym.
+    assert (await plans(other_owner, other_gym_id))["Monthly"]["id"] == foreign_id
+    assert list(await plans(owner, gym_id)) == ["Monthly"]
+
+
+async def test_pricing_rejects_the_same_plan_twice(
+    api: IntegrationAPI, storage: FakeStorage
+) -> None:
+    owner = await sign_in_owner(api)
+    gym_id = await complete_profile(owner, storage)
+    assert (await put_plans(owner, gym_id, [monthly()])).status_code == 200
+    plan_id = (await plans(owner, gym_id))["Monthly"]["id"]
+
+    response = await put_plans(
+        owner,
+        gym_id,
+        [monthly(id=plan_id, name="A"), monthly(id=plan_id, name="B")],
+    )
+    assert response.status_code == 422
+
+
+async def test_new_gyms_use_nairobi_time(
+    api: IntegrationAPI, storage: FakeStorage
+) -> None:
+    owner = await sign_in_owner(api)
+    await complete_profile(owner, storage)
+
+    gym = (await owner.call("GET", "/gyms/current")).json()["data"]
+
+    assert gym["timezone"] == "Africa/Nairobi"

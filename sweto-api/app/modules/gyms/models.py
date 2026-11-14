@@ -154,6 +154,15 @@ class Gym(
         server_default="KE",
     )
 
+    # IANA time zone for the gym's local dates ("expires today",
+    # "check-ins today"). Every gym is in Kenya for now.
+    timezone: Mapped[str] = mapped_column(
+        String(64),
+        nullable=False,
+        default="Africa/Nairobi",
+        server_default="Africa/Nairobi",
+    )
+
     latitude: Mapped[Decimal | None] = mapped_column(
         Numeric(
             precision=10,

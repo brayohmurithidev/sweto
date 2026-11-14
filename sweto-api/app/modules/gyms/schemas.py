@@ -80,6 +80,7 @@ class GymData(BaseModel):
     neighbourhood: str | None
     city: str | None
     country_code: str
+    timezone: str
 
     latitude: Decimal | None
     longitude: Decimal | None
@@ -467,6 +468,13 @@ class GymMembershipBenefitInput(BaseModel):
 
 
 class GymMembershipPlanInput(BaseModel):
+    id: UUID | None = Field(
+        default=None,
+        description=(
+            "ID of an existing membership plan to update. Without an ID, a plan "
+            "with the same name (case-insensitive) is updated in place."
+        ),
+    )
     name: str = Field(
         min_length=2,
         max_length=120,
@@ -565,6 +573,11 @@ class UpdateGymPricingRequest(BaseModel):
 
         if len(membership_names) != len(set(membership_names)):
             raise ValueError("Membership-plan names must be unique.")
+
+        plan_ids = [plan.id for plan in self.membership_plans if plan.id]
+
+        if len(plan_ids) != len(set(plan_ids)):
+            raise ValueError("Each membership plan can only appear once.")
 
         featured_count = sum(plan.is_featured for plan in self.membership_plans)
 

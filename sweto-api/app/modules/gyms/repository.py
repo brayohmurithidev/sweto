@@ -12,7 +12,10 @@ from app.modules.gyms.enums import (
     GymVerificationDocumentType,
     GymVerificationStatus,
 )
-from app.modules.gyms.exceptions import GymDayPassNotFoundError
+from app.modules.gyms.exceptions import (
+    GymDayPassNotFoundError,
+    GymMembershipPlanNotFoundError,
+)
 from app.modules.gyms.models import (
     Amenity,
     Gym,
@@ -29,6 +32,7 @@ from app.modules.gyms.models import (
 from app.modules.gyms.schemas import (
     CreateGymVerificationDocumentRequest,
     GymDayPassInput,
+    GymMembershipBenefitInput,
     GymMembershipPlanInput,
     GymOperatingHoursInput,
 )
@@ -359,35 +363,107 @@ class GymPricingRepository:
         membership_plans: list[GymMembershipPlanInput],
     ) -> None:
         await self._sync_day_passes(gym_id=gym_id, day_passes=day_passes)
-
-        await self.session.execute(
-            delete(GymMembershipPlan).where(GymMembershipPlan.gym_id == gym_id)
+        await self._sync_membership_plans(
+            gym_id=gym_id, membership_plans=membership_plans
         )
 
+    async def _sync_membership_plans(
+        self,
+        *,
+        gym_id: UUID,
+        membership_plans: list[GymMembershipPlanInput],
+    ) -> None:
+        """Update membership plans in place so their IDs stay stable.
+
+        Memberships will reference plans, so editing a price must not delete
+        and re-create the row. Matching follows the day-pass rules: an input
+        with an ``id`` updates that plan; one without updates the existing plan
+        with the same name (case-insensitive) or creates a new one. Plans
+        missing from the input are removed. A kept plan's benefits are matched
+        by name, so unchanged benefits keep their IDs too.
+        """
+
+        existing = list(await self.list_membership_plans(gym_id))
+        by_id = {plan.id: plan for plan in existing}
+        by_name = {plan.name.casefold(): plan for plan in existing}
+
+        # Match first, without changing anything, so the rows to remove are
+        # deleted before any rename could collide with their names.
+        matches: list[tuple[GymMembershipPlanInput, GymMembershipPlan | None]] = []
+        kept: set[UUID] = set()
         for item in membership_plans:
-            plan = GymMembershipPlan(
-                gym_id=gym_id,
-                name=item.name,
-                description=item.description,
-                amount=item.amount,
-                currency=item.currency,
-                billing_period=item.billing_period,
-                access_days=item.access_days,
-                visit_limit=item.visit_limit,
-                is_active=item.is_active,
-                is_featured=item.is_featured,
-                display_order=item.display_order,
-            )
+            if item.id is not None:
+                current = by_id.get(item.id)
+                if current is None:
+                    raise GymMembershipPlanNotFoundError(
+                        "One of the membership plans no longer exists. "
+                        "Refresh your pricing and try again."
+                    )
+            else:
+                current = by_name.get(item.name.casefold())
+                if current is not None and current.id in kept:
+                    current = None
+            if current is not None:
+                kept.add(current.id)
+            matches.append((item, current))
 
-            plan.benefits = [
-                GymMembershipPlanBenefit(
-                    name=benefit.name,
-                    display_order=benefit.display_order,
+        removed = [plan for plan in existing if plan.id not in kept]
+        for plan in removed:
+            await self.session.delete(plan)
+        if removed:
+            await self.session.flush()
+
+        for item, current in matches:
+            if current is None:
+                current = GymMembershipPlan(gym_id=gym_id, benefits=[])
+                self.session.add(current)
+            current.name = item.name
+            current.description = item.description
+            current.amount = item.amount
+            current.currency = item.currency
+            current.billing_period = item.billing_period
+            current.access_days = item.access_days
+            current.visit_limit = item.visit_limit
+            current.is_active = item.is_active
+            current.is_featured = item.is_featured
+            current.display_order = item.display_order
+            await self._sync_benefits(current, item.benefits)
+
+        await self.session.flush()
+
+    async def _sync_benefits(
+        self,
+        plan: GymMembershipPlan,
+        benefits: list[GymMembershipBenefitInput],
+    ) -> None:
+        """Match a plan's benefits by name: keep, reorder, add or remove."""
+
+        wanted = {benefit.name.casefold(): benefit for benefit in benefits}
+        stale = [
+            benefit
+            for benefit in plan.benefits
+            if benefit.name.casefold() not in wanted
+        ]
+        for benefit in stale:
+            plan.benefits.remove(benefit)
+        if stale:
+            # Remove before adding so a re-cased name never collides with
+            # the row it replaces under the per-plan unique name.
+            await self.session.flush()
+
+        current = {benefit.name.casefold(): benefit for benefit in plan.benefits}
+        for key, item in wanted.items():
+            match = current.get(key)
+            if match is None:
+                plan.benefits.append(
+                    GymMembershipPlanBenefit(
+                        name=item.name,
+                        display_order=item.display_order,
+                    )
                 )
-                for benefit in item.benefits
-            ]
-
-            self.session.add(plan)
+                continue
+            match.name = item.name
+            match.display_order = item.display_order
 
     async def _sync_day_passes(
         self,
