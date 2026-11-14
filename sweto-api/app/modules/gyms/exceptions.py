@@ -2,6 +2,10 @@ class GymError(Exception):
     """Base exception for gym-related failures."""
 
 
+class GymDayPassNotFoundError(GymError):
+    """Raised when pricing refers to a day pass this gym does not have."""
+
+
 class GymPhotoUploadInvalidError(GymError):
     """Raised when gym-photo upload metadata is invalid."""
 

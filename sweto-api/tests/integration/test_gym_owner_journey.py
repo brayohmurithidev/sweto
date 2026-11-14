@@ -437,3 +437,126 @@ async def test_unsupported_photo_type_is_a_client_error(
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "GYM_PHOTO_INVALID"
+
+
+async def day_passes(owner: Owner, gym_id: str) -> dict[str, dict[str, Any]]:
+    response = await owner.call("GET", f"/gyms/{gym_id}/pricing")
+    assert response.status_code == 200, response.json()
+    return {item["name"]: item for item in response.json()["data"]["day_passes"]}
+
+
+async def put_day_passes(
+    owner: Owner, gym_id: str, passes: list[dict[str, Any]]
+) -> Any:
+    return await owner.call(
+        "PUT",
+        f"/gyms/{gym_id}/pricing",
+        json={"day_passes": passes, "membership_plans": []},
+    )
+
+
+async def test_editing_a_price_keeps_the_day_pass_id(
+    api: IntegrationAPI, storage: FakeStorage
+) -> None:
+    """Bookings will point at day passes, so an edit must not re-create them."""
+    owner = await sign_in_owner(api)
+    gym_id = await complete_profile(owner, storage)
+    original = (await day_passes(owner, gym_id))["Day Pass"]
+
+    # The app sends no IDs: matching by name keeps the row.
+    response = await put_day_passes(
+        owner, gym_id, [{"name": "day pass", "amount": "650.00"}]
+    )
+    assert response.status_code == 200, response.json()
+    updated = (await day_passes(owner, gym_id))["day pass"]
+    assert updated["id"] == original["id"]
+    assert updated["amount"] == "650.00"
+
+    # With an ID, a rename keeps the row too.
+    response = await put_day_passes(
+        owner,
+        gym_id,
+        [
+            {"id": original["id"], "name": "Full Day", "amount": "700.00"},
+            {"name": "Evening", "amount": "300.00"},
+        ],
+    )
+    assert response.status_code == 200, response.json()
+    passes = await day_passes(owner, gym_id)
+    assert passes["Full Day"]["id"] == original["id"]
+    assert passes["Evening"]["id"] != original["id"]
+
+    # Passes left out are removed; the others keep their IDs.
+    evening_id = passes["Evening"]["id"]
+    response = await put_day_passes(
+        owner, gym_id, [{"name": "Evening", "amount": "350.00"}]
+    )
+    assert response.status_code == 200, response.json()
+    passes = await day_passes(owner, gym_id)
+    assert list(passes) == ["Evening"]
+    assert passes["Evening"]["id"] == evening_id
+
+
+async def test_a_removed_name_can_be_reused_by_a_renamed_pass(
+    api: IntegrationAPI, storage: FakeStorage
+) -> None:
+    owner = await sign_in_owner(api)
+    gym_id = await complete_profile(owner, storage)
+    response = await put_day_passes(
+        owner,
+        gym_id,
+        [
+            {"name": "Day Pass", "amount": "500.00"},
+            {"name": "Weekend", "amount": "800.00"},
+        ],
+    )
+    assert response.status_code == 200, response.json()
+    weekend_id = (await day_passes(owner, gym_id))["Weekend"]["id"]
+
+    # "Day Pass" is removed and "Weekend" takes its name in the same request.
+    response = await put_day_passes(
+        owner, gym_id, [{"id": weekend_id, "name": "Day Pass", "amount": "800.00"}]
+    )
+    assert response.status_code == 200, response.json()
+    passes = await day_passes(owner, gym_id)
+    assert list(passes) == ["Day Pass"]
+    assert passes["Day Pass"]["id"] == weekend_id
+
+
+async def test_pricing_rejects_unknown_or_foreign_day_pass_ids(
+    api: IntegrationAPI, storage: FakeStorage
+) -> None:
+    owner = await sign_in_owner(api)
+    gym_id = await complete_profile(owner, storage)
+    other_owner = await sign_in_owner(api, phone="0733000000")
+    other_gym_id = await complete_profile(other_owner, storage)
+    foreign_id = (await day_passes(other_owner, other_gym_id))["Day Pass"]["id"]
+
+    for unknown in ["00000000-0000-0000-0000-000000000000", foreign_id]:
+        response = await put_day_passes(
+            owner, gym_id, [{"id": unknown, "name": "Hijack", "amount": "1.00"}]
+        )
+        assert response.status_code == 422, response.json()
+        assert response.json()["error"]["code"] == "DAY_PASS_NOT_FOUND"
+
+    # Nothing changed for either gym.
+    assert (await day_passes(other_owner, other_gym_id))["Day Pass"]["id"] == foreign_id
+    assert "Day Pass" in await day_passes(owner, gym_id)
+
+
+async def test_pricing_rejects_the_same_day_pass_twice(
+    api: IntegrationAPI, storage: FakeStorage
+) -> None:
+    owner = await sign_in_owner(api)
+    gym_id = await complete_profile(owner, storage)
+    day_pass_id = (await day_passes(owner, gym_id))["Day Pass"]["id"]
+
+    response = await put_day_passes(
+        owner,
+        gym_id,
+        [
+            {"id": day_pass_id, "name": "A", "amount": "100.00"},
+            {"id": day_pass_id, "name": "B", "amount": "200.00"},
+        ],
+    )
+    assert response.status_code == 422

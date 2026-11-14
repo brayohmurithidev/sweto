@@ -12,6 +12,7 @@ from app.modules.gyms.enums import (
     GymVerificationDocumentType,
     GymVerificationStatus,
 )
+from app.modules.gyms.exceptions import GymDayPassNotFoundError
 from app.modules.gyms.models import (
     Amenity,
     Gym,
@@ -357,28 +358,10 @@ class GymPricingRepository:
         day_passes: list[GymDayPassInput],
         membership_plans: list[GymMembershipPlanInput],
     ) -> None:
-        await self.session.execute(
-            delete(GymDayPass).where(GymDayPass.gym_id == gym_id)
-        )
+        await self._sync_day_passes(gym_id=gym_id, day_passes=day_passes)
 
         await self.session.execute(
             delete(GymMembershipPlan).where(GymMembershipPlan.gym_id == gym_id)
-        )
-
-        self.session.add_all(
-            [
-                GymDayPass(
-                    gym_id=gym_id,
-                    name=item.name,
-                    description=item.description,
-                    amount=item.amount,
-                    currency=item.currency,
-                    validity_hours=item.validity_hours,
-                    is_active=item.is_active,
-                    display_order=item.display_order,
-                )
-                for item in day_passes
-            ]
         )
 
         for item in membership_plans:
@@ -405,6 +388,77 @@ class GymPricingRepository:
             ]
 
             self.session.add(plan)
+
+    async def _sync_day_passes(
+        self,
+        *,
+        gym_id: UUID,
+        day_passes: list[GymDayPassInput],
+    ) -> None:
+        """Update day passes in place so their IDs stay stable.
+
+        Bookings will reference day passes, so editing a price must not
+        delete and re-create the row. An input with an ``id`` updates that
+        day pass; an input without one updates the existing day pass with the
+        same name (case-insensitive) or creates a new one. Day passes missing
+        from the input are removed. Two passes swapping names in one request
+        is not supported (the per-gym name constraint would reject it).
+        """
+
+        existing = list(await self.list_day_passes(gym_id))
+        by_id = {item.id: item for item in existing}
+        by_name = {item.name.casefold(): item for item in existing}
+
+        # Match first, without changing anything, so the rows to remove are
+        # deleted before any rename could collide with their names.
+        matches: list[tuple[GymDayPassInput, GymDayPass | None]] = []
+        kept: set[UUID] = set()
+        for item in day_passes:
+            if item.id is not None:
+                current = by_id.get(item.id)
+                if current is None:
+                    raise GymDayPassNotFoundError(
+                        "One of the day passes no longer exists. "
+                        "Refresh your pricing and try again."
+                    )
+            else:
+                current = by_name.get(item.name.casefold())
+                if current is not None and current.id in kept:
+                    current = None
+            if current is not None:
+                kept.add(current.id)
+            matches.append((item, current))
+
+        removed = [item.id for item in existing if item.id not in kept]
+        if removed:
+            await self.session.execute(
+                delete(GymDayPass).where(GymDayPass.id.in_(removed))
+            )
+
+        for item, current in matches:
+            if current is None:
+                self.session.add(
+                    GymDayPass(
+                        gym_id=gym_id,
+                        name=item.name,
+                        description=item.description,
+                        amount=item.amount,
+                        currency=item.currency,
+                        validity_hours=item.validity_hours,
+                        is_active=item.is_active,
+                        display_order=item.display_order,
+                    )
+                )
+                continue
+            current.name = item.name
+            current.description = item.description
+            current.amount = item.amount
+            current.currency = item.currency
+            current.validity_hours = item.validity_hours
+            current.is_active = item.is_active
+            current.display_order = item.display_order
+
+        await self.session.flush()
 
 
 class GymVerificationRepository:
