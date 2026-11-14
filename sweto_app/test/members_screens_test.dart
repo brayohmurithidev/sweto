@@ -120,6 +120,32 @@ class FakeMembers implements MembersRepository {
   Object? checkInError;
   var today = const CheckInDay(visits: 0, refused: 0, entries: []);
 
+  final mpesaRequests = <(String, String, int?)>[];
+  final paymentUpdates = <MpesaPayment>[];
+  Object? mpesaError;
+
+  @override
+  Future<MpesaPayment> requestMpesaPayment(
+    String gymId,
+    String memberId, {
+    required String planId,
+    int? amount,
+  }) async {
+    if (mpesaError != null) throw mpesaError!;
+    mpesaRequests.add((memberId, planId, amount));
+    return const MpesaPayment(
+      paymentId: 'pay-1',
+      state: PaymentState.pending,
+      message: 'Waiting for the member to enter their M-Pesa PIN.',
+    );
+  }
+
+  @override
+  Future<MpesaPayment> getPayment(String gymId, String paymentId) async {
+    if (paymentUpdates.length > 1) return paymentUpdates.removeAt(0);
+    return paymentUpdates.single;
+  }
+
   @override
   Future<CheckInCode> issueCheckInCode(String gymId, String memberId) async {
     issuedCodes.add(memberId);
@@ -199,7 +225,7 @@ class FakeMembers implements MembersRepository {
   }
 }
 
-class _FakePricing extends Fake implements GymOwnerRepository {
+class FakePricing extends Fake implements GymOwnerRepository {
   @override
   Future<Gym> getCurrentGym() async =>
       const Gym(id: _gymId, name: 'FlexFit Westlands');
@@ -269,7 +295,7 @@ Future<void> _pump(
     ProviderScope(
       overrides: [
         membersRepositoryProvider.overrideWithValue(members),
-        gymOwnerRepositoryProvider.overrideWithValue(_FakePricing()),
+        gymOwnerRepositoryProvider.overrideWithValue(FakePricing()),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),

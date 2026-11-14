@@ -63,6 +63,10 @@ from app.modules.members.exceptions import (
     GymMemberNotFoundError,
     GymMemberPhoneTakenError,
     InvalidMembershipPaymentError,
+    MpesaNotConfiguredError,
+    MpesaPaymentPendingError,
+    MpesaRequestFailedError,
+    PaymentNotFoundError,
 )
 from app.modules.profiles.exceptions import (
     InvalidProfileUpdateError,
@@ -669,6 +673,13 @@ _MEMBER_ERRORS: dict[type[Exception], tuple[int, str]] = {
         status.HTTP_422_UNPROCESSABLE_CONTENT,
         "INVALID_MEMBERSHIP_PAYMENT",
     ),
+    MpesaNotConfiguredError: (
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        "MPESA_NOT_CONFIGURED",
+    ),
+    MpesaPaymentPendingError: (status.HTTP_409_CONFLICT, "MPESA_PAYMENT_PENDING"),
+    MpesaRequestFailedError: (status.HTTP_502_BAD_GATEWAY, "MPESA_REQUEST_FAILED"),
+    PaymentNotFoundError: (status.HTTP_404_NOT_FOUND, "PAYMENT_NOT_FOUND"),
 }
 
 

@@ -17,6 +17,7 @@ from app.modules.members.models import (
     GymMembership,
     MemberMessage,
     Payment,
+    PaymentTransaction,
 )
 from app.modules.profiles.models import (
     UserAccountRole,
@@ -40,6 +41,7 @@ __all__ = [
     "MemberMessage",
     "OTPChallenge",
     "Payment",
+    "PaymentTransaction",
     "RefreshSession",
     "User",
     "UserAccountRole",

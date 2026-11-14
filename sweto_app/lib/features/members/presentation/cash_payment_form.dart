@@ -11,8 +11,11 @@ class CashPaymentForm extends StatefulWidget {
   const CashPaymentForm({
     required this.plans,
     required this.onChanged,
+    this.amountLabel = 'Amount received (KES)',
     super.key,
   });
+
+  final String amountLabel;
 
   /// Active, saved membership plans.
   final List<GymPricingPlan> plans;
@@ -94,7 +97,7 @@ class _CashPaymentFormState extends State<CashPaymentForm> {
           controller: _amount,
           keyboardType: TextInputType.number,
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-          decoration: _decoration('Amount received (KES)'),
+          decoration: _decoration(widget.amountLabel),
           onChanged: (_) => _notify(),
         ),
       ],

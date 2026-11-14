@@ -95,6 +95,27 @@ class Settings(BaseSettings):
     otp_delivery_status_ip_limit: int = 120
     otp_delivery_status_ip_window_seconds: int = 900
 
+    # M-Pesa STK Push (Daraja). "simulated" accepts every request and waits
+    # for a callback you post yourself: local demos only.
+    mpesa_mode: Literal["disabled", "simulated", "sandbox", "production"] = "disabled"
+    mpesa_consumer_key: SecretStr | None = None
+    mpesa_consumer_secret: SecretStr | None = None
+    mpesa_shortcode: str | None = None
+    mpesa_passkey: SecretStr | None = None
+    mpesa_transaction_type: Literal[
+        "CustomerPayBillOnline", "CustomerBuyGoodsOnline"
+    ] = "CustomerPayBillOnline"
+    # Till number for Buy Goods; defaults to the shortcode (Pay Bill).
+    mpesa_party_b: str | None = None
+    # Public https base of this API, e.g. https://api.sweto.co.ke
+    mpesa_callback_base_url: str | None = None
+    # Secret in the callback path, so only Safaricom (who got the URL from
+    # us) can post results.
+    mpesa_callback_token: SecretStr | None = None
+    mpesa_timeout_seconds: float = Field(default=15, gt=0, le=60)
+    # A request with no result after this long is given up as timed out.
+    mpesa_pending_timeout_minutes: int = Field(default=15, ge=2, le=1440)
+
     # Every check-in attempt at a gym counts, so codes can't be guessed
     # faster than a door could ever let people in.
     check_in_attempt_limit: int = 30
@@ -183,6 +204,43 @@ class Settings(BaseSettings):
                     "AFRICASTALKING_ENVIRONMENT=sandbox doesn't deliver real SMS "
                     "and isn't allowed in staging or production."
                 )
+        return self
+
+    @model_validator(mode="after")
+    def validate_mpesa(self) -> "Settings":
+        if self.mpesa_mode == "simulated" and self.app_environment in {
+            "staging",
+            "production",
+        }:
+            raise ValueError(
+                "MPESA_MODE=simulated never takes money and is only allowed in "
+                "local, development and testing environments."
+            )
+        if self.mpesa_mode == "sandbox" and self.app_environment == "production":
+            raise ValueError("MPESA_MODE=sandbox isn't allowed in production.")
+        if self.mpesa_mode in {"sandbox", "production"}:
+            missing = _missing(
+                {
+                    "MPESA_CONSUMER_KEY": self.mpesa_consumer_key,
+                    "MPESA_CONSUMER_SECRET": self.mpesa_consumer_secret,
+                    "MPESA_SHORTCODE": self.mpesa_shortcode,
+                    "MPESA_PASSKEY": self.mpesa_passkey,
+                    "MPESA_CALLBACK_BASE_URL": self.mpesa_callback_base_url,
+                    "MPESA_CALLBACK_TOKEN": self.mpesa_callback_token,
+                }
+            )
+            if missing:
+                raise ValueError(
+                    f"MPESA_MODE={self.mpesa_mode} needs these settings: "
+                    + ", ".join(missing)
+                )
+            base = self.mpesa_callback_base_url or ""
+            if not base.startswith("https://"):
+                raise ValueError("MPESA_CALLBACK_BASE_URL must use https.")
+        token = self.mpesa_callback_token
+        # Blank (as in .env.example) means unset.
+        if token is not None and 0 < len(token.get_secret_value()) < 24:
+            raise ValueError("MPESA_CALLBACK_TOKEN must be at least 24 characters.")
         return self
 
     @model_validator(mode="after")
