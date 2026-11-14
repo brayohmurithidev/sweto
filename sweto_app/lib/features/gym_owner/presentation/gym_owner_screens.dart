@@ -3320,22 +3320,27 @@ class _GymVerificationSetupScreenState
                     size: 28,
                   ),
                   const SizedBox(width: 14),
-                  Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _pickingFile
-                            ? 'Choosing file…'
-                            : (_selectedFileName ?? 'Choose file'),
-                        style: AppTextStyles.labelMedium,
-                      ),
-                      Text(
-                        'PDF, JPG or PNG · Max 10MB',
-                        style: AppTextStyles.bodySmall,
-                      ),
-                    ],
+                  Expanded(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          _pickingFile
+                              ? 'Choosing file…'
+                              : (_selectedFileName ?? 'Choose file'),
+                          style: AppTextStyles.labelMedium,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        Text(
+                          'PDF, JPG or PNG · Max 10MB',
+                          style: AppTextStyles.bodySmall,
+                        ),
+                      ],
+                    ),
                   ),
+                  const SizedBox(width: 16),
                 ],
               ),
             ),
