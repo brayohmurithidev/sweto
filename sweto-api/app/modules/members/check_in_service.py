@@ -30,6 +30,7 @@ from app.modules.members.exceptions import (
     GymMemberNotFoundError,
 )
 from app.modules.members.models import GymCheckIn, GymMember, GymMembership
+from app.modules.members.notifier import MemberNotifier
 from app.modules.members.schemas import (
     CheckInCodeData,
     CheckInData,
@@ -60,11 +61,13 @@ class CheckInService:
         clock: Clock,
         settings: Settings,
         rate_limiter: RateLimiter,
+        notifier: MemberNotifier | None = None,
     ) -> None:
         self.session = session
         self.clock = clock
         self.settings = settings
         self.rate_limiter = rate_limiter
+        self.notifier = notifier
         self.gyms = GymRepository(session)
         self.staff = GymStaffRepository(session)
 
@@ -90,10 +93,16 @@ class CheckInService:
                 if attempt == _CODE_ATTEMPTS - 1:
                     raise
                 continue
+            sms = None
+            if self.notifier is not None:
+                sms = await self.notifier.check_in_code(
+                    gym=gym, member=member, code=display_code(code)
+                )
             return CheckInCodeData(
                 member_id=member.id,
                 code=display_code(code),
                 qr_payload=qr_payload(code),
+                sms=sms,
             )
         raise AssertionError("unreachable")  # pragma: no cover
 

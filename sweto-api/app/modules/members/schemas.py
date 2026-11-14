@@ -9,6 +9,7 @@ from app.modules.members.enums import (
     CheckInResult,
     GymMembershipStatus,
     GymMemberStatus,
+    MemberMessageStatus,
     MemberStanding,
     PaymentMethod,
     PaymentStatus,
@@ -22,6 +23,11 @@ def _collapse_spaces(value: str) -> str:
 class CreateGymMemberRequest(BaseModel):
     full_name: str = Field(min_length=2, max_length=120)
     phone_number: str = Field(min_length=3, max_length=32)
+    sms_consent: bool = Field(
+        default=False,
+        description="Staff confirm the member agreed to SMS from the gym. "
+        "Without it the member is added but gets no SMS.",
+    )
 
     @field_validator("full_name")
     @classmethod
@@ -91,6 +97,9 @@ class GymMemberData(BaseModel):
     standing: MemberStanding
     paid_until: date | None
     has_check_in_code: bool
+    sms_enabled: bool
+    sms_consent_recorded_at: datetime | None
+    sms_opted_out_at: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -107,9 +116,21 @@ class GymMemberDetailData(BaseModel):
     memberships: list[GymMembershipData]
 
 
+class SetMemberSmsRequest(BaseModel):
+    enabled: bool = Field(
+        description="true records that the member agreed (again) to SMS; "
+        "false records that they asked to stop."
+    )
+
+
 class RecordCashPaymentData(BaseModel):
     member: GymMemberData
     membership: GymMembershipData
+    sms: MemberMessageStatus | None = Field(
+        default=None,
+        description="Welcome or receipt SMS outcome; null when none was sent "
+        "(no consent, opted out).",
+    )
 
 
 class CheckInCodeData(BaseModel):
@@ -118,6 +139,9 @@ class CheckInCodeData(BaseModel):
     member_id: UUID
     code: str = Field(description="Display form, e.g. 7KQ2-M9XD.")
     qr_payload: str = Field(description="What the member's QR code encodes.")
+    sms: MemberMessageStatus | None = Field(
+        default=None, description="Outcome of texting the code to the member."
+    )
 
 
 class CheckInRequest(BaseModel):

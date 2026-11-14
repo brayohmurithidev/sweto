@@ -4,7 +4,7 @@ logger = logging.getLogger(__name__)
 
 
 class ConsoleSMSProvider:
-    """Development provider that writes OTP messages to application logs."""
+    """Development provider that writes messages to application logs."""
 
     async def send_otp(
         self,
@@ -18,5 +18,11 @@ class ConsoleSMSProvider:
             phone_number,
             otp_code,
             expires_in_seconds,
+        )
+        return None
+
+    async def send_text(self, *, phone_number: str, message: str) -> str | None:
+        logger.warning(
+            "SWETO DEVELOPMENT SMS | phone=%s message=%s", phone_number, message
         )
         return None

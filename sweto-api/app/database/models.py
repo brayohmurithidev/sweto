@@ -15,6 +15,7 @@ from app.modules.members.models import (
     GymCheckIn,
     GymMember,
     GymMembership,
+    MemberMessage,
     Payment,
 )
 from app.modules.profiles.models import (
@@ -36,6 +37,7 @@ __all__ = [
     "GymStaff",
     "GymVerificationDocument",
     "GymVerificationReview",
+    "MemberMessage",
     "OTPChallenge",
     "Payment",
     "RefreshSession",

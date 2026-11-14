@@ -102,12 +102,21 @@ class AdvantaSMSProvider:
         otp_code: str,
         expires_in_seconds: int,
     ) -> str | None:
+        return await self._send(
+            phone_number,
+            render_otp_message(
+                otp_code=otp_code, expires_in_seconds=expires_in_seconds
+            ),
+        )
+
+    async def send_text(self, *, phone_number: str, message: str) -> str | None:
+        return await self._send(phone_number, message)
+
+    async def _send(self, phone_number: str, message: str) -> str | None:
         body = {
             "apikey": self._config.api_key.get_secret_value(),
             "partnerID": self._config.partner_id,
-            "message": render_otp_message(
-                otp_code=otp_code, expires_in_seconds=expires_in_seconds
-            ),
+            "message": message,
             "shortcode": self._config.shortcode,
             "mobile": phone_number.removeprefix("+"),
         }

@@ -10,9 +10,11 @@ from app.modules.gyms.enums import GymStaffRole, MembershipBillingPeriod
 from app.modules.gyms.exceptions import GymAccessDeniedError, GymNotFoundError
 from app.modules.gyms.models import Gym
 from app.modules.gyms.repository import GymRepository, GymStaffRepository
+from app.modules.members.codes import display_code, generate_code, hash_code
 from app.modules.members.enums import (
     GymMembershipStatus,
     GymMemberStatus,
+    MemberMessageStatus,
     MemberStanding,
     PaymentMethod,
     PaymentStatus,
@@ -24,6 +26,7 @@ from app.modules.members.exceptions import (
     InvalidMembershipPaymentError,
 )
 from app.modules.members.models import GymMember, GymMembership, Payment
+from app.modules.members.notifier import MemberNotifier
 from app.modules.members.periods import EXPIRING_WITHIN_DAYS, period_end
 from app.modules.members.repository import GymMemberRepository, MembershipPlanLookup
 from app.modules.members.schemas import (
@@ -35,6 +38,7 @@ from app.modules.members.schemas import (
     PaymentData,
     RecordCashPaymentData,
     RecordCashPaymentRequest,
+    SetMemberSmsRequest,
     UpdateGymMemberRequest,
 )
 from app.shared.clock import Clock
@@ -56,9 +60,18 @@ def standing_for(paid_until: date | None, today: date) -> MemberStanding:
 class GymMemberService:
     """Members a gym runs through SWETO: records, memberships, cash payments."""
 
-    def __init__(self, *, session: AsyncSession, clock: Clock) -> None:
+    def __init__(
+        self,
+        *,
+        session: AsyncSession,
+        clock: Clock,
+        notifier: MemberNotifier | None = None,
+        code_secret: str = "",
+    ) -> None:
         self.session = session
         self.clock = clock
+        self.notifier = notifier
+        self.code_secret = code_secret
         self.gyms = GymRepository(session)
         self.staff = GymStaffRepository(session)
         self.members = GymMemberRepository(session)
@@ -103,6 +116,8 @@ class GymMemberService:
         member = GymMember(
             gym_id=gym.id, full_name=payload.full_name, phone_number=phone
         )
+        if payload.sms_consent:
+            self._record_consent(member, user_id)
         self.members.add(member)
         await self._commit_member_change()
         await self.session.refresh(member)
@@ -146,6 +161,31 @@ class GymMemberService:
         member.status = GymMemberStatus.ARCHIVED if archived else GymMemberStatus.ACTIVE
         await self.session.commit()
         return await self._summary(gym, member)
+
+    async def set_sms(
+        self,
+        *,
+        user_id: UUID,
+        gym_id: UUID,
+        member_id: UUID,
+        payload: SetMemberSmsRequest,
+    ) -> GymMemberData:
+        """Record that the member agreed to SMS, or asked to stop."""
+
+        gym = await self._gym_for_manager(user_id=user_id, gym_id=gym_id)
+        member = await self._member(gym, member_id, for_update=True)
+        if payload.enabled:
+            self._record_consent(member, user_id)
+        else:
+            member.sms_opted_out_at = self.clock()
+        await self.session.commit()
+        return await self._summary(gym, member)
+
+    def _record_consent(self, member: GymMember, user_id: UUID) -> None:
+        member.sms_consent = True
+        member.sms_consent_recorded_at = self.clock()
+        member.sms_consent_recorded_by_user_id = user_id
+        member.sms_opted_out_at = None
 
     async def record_cash_payment(
         self,
@@ -211,9 +251,39 @@ class GymMemberService:
         )
         await self.session.commit()
 
+        sms = await self._notify_payment(gym, member, membership)
         detail = await self._detail(gym, member.id)
         recorded = next(m for m in detail.memberships if m.id == membership.id)
-        return RecordCashPaymentData(member=detail.member, membership=recorded)
+        return RecordCashPaymentData(member=detail.member, membership=recorded, sms=sms)
+
+    async def _notify_payment(
+        self, gym: Gym, member: GymMember, membership: GymMembership
+    ) -> MemberMessageStatus | None:
+        """The first payment brings a welcome with a fresh check-in code;
+        later ones a receipt. Runs after the payment is committed."""
+
+        if self.notifier is None or not member.can_receive_sms:
+            return None
+        if not await self.notifier.has_welcome(member.id):
+            # Only a hash of any earlier code exists, so texting a code means
+            # issuing a new one; the old one stops working.
+            code = generate_code()
+            member.check_in_code_hash = hash_code(code, secret=self.code_secret)
+            try:
+                await self.session.commit()
+            except IntegrityError:
+                await self.session.rollback()
+                return None
+            return await self.notifier.welcome(
+                gym=gym, member=member, membership=membership, code=display_code(code)
+            )
+        paid_until = await self.members.paid_until(member.id)
+        return await self.notifier.payment_receipt(
+            gym=gym,
+            member=member,
+            membership=membership,
+            paid_until=paid_until or membership.ends_on,
+        )
 
     @staticmethod
     def _start_date(
@@ -324,6 +394,9 @@ class GymMemberService:
             standing=standing_for(paid_until, today),
             paid_until=paid_until,
             has_check_in_code=member.check_in_code_hash is not None,
+            sms_enabled=member.can_receive_sms,
+            sms_consent_recorded_at=member.sms_consent_recorded_at,
+            sms_opted_out_at=member.sms_opted_out_at,
             created_at=member.created_at,
             updated_at=member.updated_at,
         )

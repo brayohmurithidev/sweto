@@ -20,6 +20,7 @@ from sqlalchemy import (
     Numeric,
     String,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,6 +31,8 @@ from app.modules.members.enums import (
     CheckInResult,
     GymMembershipStatus,
     GymMemberStatus,
+    MemberMessageKind,
+    MemberMessageStatus,
     PaymentMethod,
     PaymentStatus,
 )
@@ -62,6 +65,25 @@ class GymMember(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Keyed hash (HMAC) of the member's check-in code; the code itself is
     # shown once when issued and never stored. Issuing a new one replaces it.
     check_in_code_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+    # SMS needs the member's agreement, confirmed by staff when they record
+    # it. An opt-out wins until consent is recorded again.
+    sms_consent: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    sms_consent_recorded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    sms_consent_recorded_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    sms_opted_out_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    @property
+    def can_receive_sms(self) -> bool:
+        return self.sms_consent and self.sms_opted_out_at is None
 
     memberships: Mapped[list["GymMembership"]] = relationship(
         back_populates="member",
@@ -196,4 +218,57 @@ class GymCheckIn(UUIDPrimaryKeyMixin, Base):
     )
     checked_in_by_user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class MemberMessage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One SMS to a member, so each notice goes out once.
+
+    The text is not stored: a welcome or code message contains a check-in
+    code, and only the code's hash may be kept.
+    """
+
+    __tablename__ = "member_messages"
+    __table_args__ = (
+        # One welcome per member; one receipt and one of each reminder per
+        # membership period. Check-in code messages repeat by design.
+        Index(
+            "uq_member_messages_welcome",
+            "member_id",
+            unique=True,
+            postgresql_where=text("kind = 'welcome'"),
+        ),
+        Index(
+            "uq_member_messages_membership_kind",
+            "membership_id",
+            "kind",
+            unique=True,
+            postgresql_where=text(
+                "kind IN ('payment_receipt', 'expiry_reminder_3_days', "
+                "'expiry_reminder_today')"
+            ),
+        ),
+        Index("ix_member_messages_gym_created", "gym_id", "created_at"),
+    )
+
+    gym_id: Mapped[UUID] = mapped_column(
+        ForeignKey("gyms.id", ondelete="CASCADE"), nullable=False
+    )
+    member_id: Mapped[UUID] = mapped_column(
+        ForeignKey("gym_members.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    membership_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("gym_memberships.id", ondelete="CASCADE"), nullable=True
+    )
+    kind: Mapped[MemberMessageKind] = mapped_column(
+        string_enum(MemberMessageKind, name="member_message_kind"), nullable=False
+    )
+    status: Mapped[MemberMessageStatus] = mapped_column(
+        string_enum(MemberMessageStatus, name="member_message_status"),
+        nullable=False,
+    )
+    provider_message_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    error_reason: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
