@@ -206,6 +206,7 @@ class _DashboardState extends ConsumerState<GymOwnerDashboardScreen> {
                   ),
                 ],
               ),
+              if (!limited) ...[const SizedBox(height: 14), _membersCard()],
               const SizedBox(height: 24),
               Text('Tasks to Complete', style: AppTextStyles.titleLarge),
               const SizedBox(height: 10),
@@ -307,6 +308,30 @@ class _DashboardState extends ConsumerState<GymOwnerDashboardScreen> {
       borderRadius: BorderRadius.circular(AppRadius.md),
     ),
     child: const Text('Some features will unlock after your gym is verified.'),
+  );
+
+  /// Entry to the member list; shown once the gym is verified.
+  Widget _membersCard() => Material(
+    color: AppColors.surface,
+    borderRadius: BorderRadius.circular(AppRadius.lg),
+    child: ListTile(
+      key: const Key('dashboard-members'),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.lg),
+        side: const BorderSide(color: AppColors.border),
+      ),
+      leading: const Icon(Icons.people_outline, color: AppColors.primary),
+      title: const Text('Members'),
+      subtitle: Text(
+        'Add members, see who has expired, record cash',
+        style: AppTextStyles.bodySmall,
+      ),
+      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+      onTap: () => context.pushNamed(
+        AppRoutes.membersName,
+        pathParameters: {'gymId': _gym!.id},
+      ),
+    ),
   );
 
   Widget _stat(String label, String value, IconData icon) => Container(

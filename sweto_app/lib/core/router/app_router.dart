@@ -13,6 +13,9 @@ import 'package:sweto_app/features/onboarding/presentation/onboarding_screen.dar
 import 'package:sweto_app/features/splash/presentation/splash_screen.dart';
 import 'package:sweto_app/features/gym_owner/presentation/gym_owner_screens.dart';
 import 'package:sweto_app/features/gym_owner/presentation/gym_owner_dashboard.dart';
+import 'package:sweto_app/features/members/presentation/add_member_screen.dart';
+import 'package:sweto_app/features/members/presentation/member_detail_screen.dart';
+import 'package:sweto_app/features/members/presentation/members_screen.dart';
 
 CustomTransitionPage<void> _onboardingPage(GoRouterState state, Widget child) =>
     CustomTransitionPage<void>(
@@ -141,6 +144,27 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         name: AppRoutes.homeName,
         pageBuilder: (context, state) =>
             _onboardingPage(state, const GymOwnerDashboardScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.membersPath,
+        name: AppRoutes.membersName,
+        builder: (context, state) =>
+            MembersScreen(gymId: state.pathParameters['gymId']!),
+      ),
+      // Before the detail route, so "new" is never read as a member ID.
+      GoRoute(
+        path: AppRoutes.addMemberPath,
+        name: AppRoutes.addMemberName,
+        builder: (context, state) =>
+            AddMemberScreen(gymId: state.pathParameters['gymId']!),
+      ),
+      GoRoute(
+        path: AppRoutes.memberDetailPath,
+        name: AppRoutes.memberDetailName,
+        builder: (context, state) => MemberDetailScreen(
+          gymId: state.pathParameters['gymId']!,
+          memberId: state.pathParameters['memberId']!,
+        ),
       ),
       GoRoute(
         path: AppRoutes.profileCompletionPath,

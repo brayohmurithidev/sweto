@@ -291,6 +291,7 @@ class DioGymOwnerRepository implements GymOwnerRepository {
         (value is List ? value : const []).map((raw) {
           final item = _map(raw);
           return GymPricingPlan(
+            id: item['id'] as String?,
             name: _string(item, 'name'),
             amount: (double.tryParse('${item['amount']}') ?? 0).round(),
             billingPeriod: dayPass
