@@ -1,6 +1,9 @@
 """SMS to members: consent, welcome, receipts, codes, reminders (PR 5)."""
 
+import os
 import re
+import subprocess
+import sys
 from typing import Any
 
 import pytest
@@ -195,3 +198,21 @@ async def test_reminders_go_three_days_before_and_on_the_day_once_each(
     # The renewed member (paid to 27 Nov) and the one without consent got none.
     assert texts_to(api, "+254711000002") == []
     assert texts_to(api, "+254711000003") == []
+
+
+def test_the_reminder_command_runs_on_its_own(migrated_database_url: str) -> None:
+    """`python -m app.jobs.membership_reminders` works outside the API process."""
+    result = subprocess.run(
+        [sys.executable, "-m", "app.jobs.membership_reminders"],
+        env={
+            **os.environ,
+            "DATABASE_URL": migrated_database_url,
+            "SMS_PROVIDER": "console",
+        },
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr[-2000:]
+    assert "Membership reminders:" in result.stderr

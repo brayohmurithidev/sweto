@@ -21,6 +21,7 @@ from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import aliased
 
+import app.database.models  # noqa: F401  (registers every model for the mappers)
 from app.core.config import Settings
 from app.integrations.sms.base import SMSProvider
 from app.modules.gyms.models import Gym

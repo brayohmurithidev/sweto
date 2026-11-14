@@ -206,6 +206,9 @@ class _AddMemberScreenState extends ConsumerState<AddMemberScreen> {
               key: const Key('member-name-field'),
               controller: _name,
               textCapitalization: TextCapitalization.words,
+              // Autocorrect "fixes" names (Njeri -> Nehru).
+              autocorrect: false,
+              enableSuggestions: false,
               decoration: _decoration('Full name', _nameError),
               onChanged: (_) => setState(() => _nameError = null),
             ),
