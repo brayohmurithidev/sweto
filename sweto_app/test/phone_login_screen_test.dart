@@ -55,8 +55,20 @@ void main() {
   Future<void> chooseCountry(WidgetTester tester, String isoCode) async {
     await tester.tap(find.byKey(const Key('phone-country-button')));
     await tester.pumpAndSettle();
+    // The sheet's list is lazy, so countries below the fold are not built
+    // until scrolled to; scroll the sheet's list rather than assuming the
+    // tile already exists.
     final option = find.byKey(Key('phone-country-$isoCode'));
-    await tester.ensureVisible(option);
+    await tester.scrollUntilVisible(
+      option,
+      100,
+      scrollable: find
+          .ancestor(
+            of: find.byKey(const Key('phone-country-KE')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.pumpAndSettle();
     await tester.tap(option);
     await tester.pumpAndSettle();
