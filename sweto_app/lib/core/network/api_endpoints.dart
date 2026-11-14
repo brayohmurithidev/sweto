@@ -51,6 +51,9 @@ class ApiEndpoints {
       '${gymMembers(gymId)}/$memberId';
   static String gymMemberCashPayment(String gymId, String memberId) =>
       '${gymMember(gymId, memberId)}/payments/cash';
+  static String gymMemberCheckInCode(String gymId, String memberId) =>
+      '${gymMember(gymId, memberId)}/check-in-code';
+  static String gymCheckIns(String gymId) => '$gyms/$gymId/check-ins';
 
   static const changePassword = '/api/v1/auth/change-password';
 }

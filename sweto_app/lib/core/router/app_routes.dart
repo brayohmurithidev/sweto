@@ -47,6 +47,9 @@ class AppRoutes {
   static const memberDetailName = 'member-detail';
   static const memberDetailPath = '/gyms/:gymId/members/:memberId';
 
+  static const checkInName = 'check-in';
+  static const checkInPath = '/gyms/:gymId/check-in';
+
   static const healthName = 'health';
   static const healthPath = '/health';
 }

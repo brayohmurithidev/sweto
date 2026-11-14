@@ -30,6 +30,8 @@
 	<string>SWETO uses your location to help you set your gym's accurate position.</string>
 	<key>GMSApiKey</key>
 	<string>$(GMS_API_KEY)</string>
+	<key>NSCameraUsageDescription</key>
+	<string>SWETO uses the camera to scan members' check-in QR codes at the door.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>SWETO uses your photo library so you can add photos of your gym.</string>
 	<key>UIApplicationSceneManifest</key>

@@ -192,6 +192,7 @@ class GymMemberService:
             starts_on=starts_on,
             ends_on=period_end(starts_on, billing_period),
             status=GymMembershipStatus.ACTIVE,
+            visit_limit=plan.visit_limit,
         )
         self.session.add(membership)
         await self.session.flush()
@@ -322,6 +323,7 @@ class GymMemberService:
             status=member.status,
             standing=standing_for(paid_until, today),
             paid_until=paid_until,
+            has_check_in_code=member.check_in_code_hash is not None,
             created_at=member.created_at,
             updated_at=member.updated_at,
         )
@@ -341,6 +343,7 @@ class GymMemberService:
             starts_on=membership.starts_on,
             ends_on=membership.ends_on,
             status=status,
+            visit_limit=membership.visit_limit,
             payments=[
                 PaymentData(
                     id=p.id,

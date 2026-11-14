@@ -25,4 +25,7 @@ abstract interface class MembersRepository {
     String memberId,
     CashPaymentInput input,
   );
+  Future<CheckInCode> issueCheckInCode(String gymId, String memberId);
+  Future<CheckInOutcome> checkIn(String gymId, String code);
+  Future<CheckInDay> checkInsToday(String gymId);
 }

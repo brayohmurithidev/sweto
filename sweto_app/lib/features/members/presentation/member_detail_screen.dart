@@ -5,6 +5,7 @@ import 'package:sweto_app/core/theme/radius.dart';
 import 'package:sweto_app/core/theme/spacing.dart';
 import 'package:sweto_app/core/theme/text_styles.dart';
 import 'package:sweto_app/features/members/domain/member_entities.dart';
+import 'package:sweto_app/features/members/presentation/check_in_code_dialog.dart';
 import 'package:sweto_app/features/members/presentation/member_formatting.dart';
 import 'package:sweto_app/features/members/presentation/members_providers.dart';
 import 'package:sweto_app/features/members/presentation/record_cash_payment_sheet.dart';
@@ -64,6 +65,45 @@ class _MemberDetailState extends ConsumerState<MemberDetailScreen> {
       message: 'Payment recorded. ${standingLabel(updated.member)}.',
       type: SwetoSnackBarType.success,
     );
+  }
+
+  Future<void> _issueCode() async {
+    final member = _detail?.member;
+    if (member == null) return;
+    if (member.hasCheckInCode) {
+      final confirmed = await showSwetoConfirmationDialog(
+        context,
+        title: 'Issue a new code?',
+        message:
+            '${member.fullName}\'s current code and QR will stop working '
+            'straight away.',
+        confirmLabel: 'New code',
+      );
+      if (!confirmed || !mounted) return;
+    }
+    setState(() => _busy = true);
+    try {
+      final code = await ref
+          .read(membersRepositoryProvider)
+          .issueCheckInCode(widget.gymId, member.id);
+      if (!mounted) return;
+      await showCheckInCodeDialog(
+        context,
+        memberName: member.fullName,
+        code: code,
+      );
+      await _load();
+    } catch (error) {
+      if (mounted) {
+        showSwetoSnackBar(
+          context,
+          message: memberErrorMessage(error),
+          type: SwetoSnackBarType.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   Future<void> _toggleArchived() async {
@@ -156,12 +196,15 @@ class _MemberDetailState extends ConsumerState<MemberDetailScreen> {
                         color: AppColors.warning,
                       ),
                     )
-                  else
+                  else ...[
                     AppPrimaryButton(
                       key: const Key('record-cash-button'),
                       label: 'Record cash payment',
                       onPressed: _busy ? null : _recordPayment,
                     ),
+                    const SizedBox(height: AppSpacing.sm),
+                    _checkInCodeCard(detail.member),
+                  ],
                   const SizedBox(height: AppSpacing.lg),
                   Text('Membership history', style: AppTextStyles.titleLarge),
                   const SizedBox(height: AppSpacing.xs),
@@ -178,6 +221,29 @@ class _MemberDetailState extends ConsumerState<MemberDetailScreen> {
             ),
     );
   }
+
+  Widget _checkInCodeCard(GymMember member) => Container(
+    decoration: BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      border: Border.all(color: AppColors.border),
+    ),
+    child: ListTile(
+      leading: const Icon(Icons.qr_code_2, color: AppColors.primary),
+      title: const Text('Check-in code'),
+      subtitle: Text(
+        member.hasCheckInCode
+            ? 'Issued. Codes are shown once; a new one replaces it.'
+            : 'Not issued yet.',
+        style: AppTextStyles.bodySmall,
+      ),
+      trailing: TextButton(
+        key: const Key('issue-check-in-code'),
+        onPressed: _busy ? null : _issueCode,
+        child: Text(member.hasCheckInCode ? 'New code' : 'Show QR'),
+      ),
+    ),
+  );
 
   Widget _header(GymMember member) => Container(
     padding: const EdgeInsets.all(AppSpacing.md),

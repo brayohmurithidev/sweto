@@ -30,6 +30,16 @@ class MemberStanding(StrEnum):
     NO_MEMBERSHIP = "no_membership"
 
 
+class CheckInResult(StrEnum):
+    ALLOWED = "allowed"
+    EXPIRED = "expired"
+    NOT_STARTED = "not_started"
+    NO_MEMBERSHIP = "no_membership"
+    ARCHIVED = "archived"
+    VISIT_LIMIT_REACHED = "visit_limit_reached"
+    UNKNOWN_CODE = "unknown_code"
+
+
 class PaymentMethod(StrEnum):
     CASH = "cash"
     MPESA = "mpesa"

@@ -28,6 +28,7 @@ class GymMember {
     required this.status,
     required this.standing,
     this.paidUntil,
+    this.hasCheckInCode = false,
   });
 
   final String id;
@@ -38,6 +39,9 @@ class GymMember {
 
   /// Last day covered by a paid membership, in the gym's local calendar.
   final DateTime? paidUntil;
+
+  /// Whether a check-in code has been issued (the code itself is never kept).
+  final bool hasCheckInCode;
 
   bool get isArchived => status == MemberStatus.archived;
 }
@@ -101,4 +105,99 @@ class CashPaymentInput {
 
   /// Only for a member who paid before being added (up to 90 days back).
   final DateTime? startsOn;
+}
+
+/// A freshly issued check-in code. Shown once; only a hash is stored.
+class CheckInCode {
+  const CheckInCode({required this.code, required this.qrPayload});
+
+  /// Display form, e.g. "7KQ2-M9XD".
+  final String code;
+  final String qrPayload;
+}
+
+enum CheckInResult {
+  allowed('allowed'),
+  expired('expired'),
+  notStarted('not_started'),
+  noMembership('no_membership'),
+  archived('archived'),
+  visitLimitReached('visit_limit_reached'),
+  unknownCode('unknown_code');
+
+  const CheckInResult(this.apiValue);
+  final String apiValue;
+
+  static CheckInResult fromApi(String? value) => CheckInResult.values
+      .firstWhere((r) => r.apiValue == value, orElse: () => unknownCode);
+}
+
+class CheckInOutcome {
+  const CheckInOutcome({
+    required this.result,
+    required this.alreadyCheckedInToday,
+    required this.message,
+    this.memberName,
+    this.paidUntil,
+    this.planName,
+    this.visitsUsed,
+    this.visitLimit,
+  });
+
+  final CheckInResult result;
+  final bool alreadyCheckedInToday;
+  final String message;
+  final String? memberName;
+  final DateTime? paidUntil;
+  final String? planName;
+  final int? visitsUsed;
+  final int? visitLimit;
+
+  bool get allowed => result == CheckInResult.allowed;
+}
+
+class CheckInEntry {
+  const CheckInEntry({
+    required this.id,
+    required this.result,
+    required this.alreadyCheckedInToday,
+    required this.checkedInAt,
+    this.memberName,
+  });
+
+  final String id;
+  final CheckInResult result;
+  final bool alreadyCheckedInToday;
+  final DateTime checkedInAt;
+  final String? memberName;
+}
+
+class CheckInDay {
+  const CheckInDay({
+    required this.visits,
+    required this.refused,
+    required this.entries,
+  });
+
+  final int visits;
+  final int refused;
+  final List<CheckInEntry> entries;
+}
+
+/// Canonical form of a typed or scanned code, or null if it can't be one.
+///
+/// Mirrors the API: 8 characters without look-alikes (no 0/O, 1/I/L), any
+/// case, spaces and dashes ignored, optionally the QR payload.
+String? normalizeCheckInCode(String raw) {
+  const alphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+  const prefix = 'sweto:checkin:';
+  var value = raw.trim();
+  if (value.toLowerCase().startsWith(prefix)) {
+    value = value.substring(prefix.length);
+  }
+  value = value.replaceAll(RegExp(r'[\s-]'), '').toUpperCase();
+  if (value.length != 8 || value.split('').any((c) => !alphabet.contains(c))) {
+    return null;
+  }
+  return value;
 }

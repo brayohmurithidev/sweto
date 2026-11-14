@@ -87,6 +87,65 @@ class DioMembersRepository implements MembersRepository {
     return getMember(gymId, memberId);
   }
 
+  @override
+  Future<CheckInCode> issueCheckInCode(String gymId, String memberId) async {
+    final r = await _dio.post<Map<String, dynamic>>(
+      ApiEndpoints.gymMemberCheckInCode(gymId, memberId),
+    );
+    final d = _data(r.data);
+    return CheckInCode(
+      code: _string(d, 'code'),
+      qrPayload: _string(d, 'qr_payload'),
+    );
+  }
+
+  @override
+  Future<CheckInOutcome> checkIn(String gymId, String code) async {
+    final r = await _dio.post<Map<String, dynamic>>(
+      ApiEndpoints.gymCheckIns(gymId),
+      data: {'code': code},
+    );
+    final d = _data(r.data);
+    final member = d['member'] is Map ? _map(d['member']) : null;
+    final membership = d['membership'] is Map ? _map(d['membership']) : null;
+    return CheckInOutcome(
+      result: CheckInResult.fromApi(d['result'] as String?),
+      alreadyCheckedInToday: d['already_checked_in_today'] == true,
+      message: d['message'] as String? ?? '',
+      memberName: member?['full_name'] as String?,
+      paidUntil: _date(member?['paid_until']),
+      planName: membership?['plan_name'] as String?,
+      visitsUsed: (membership?['visits_used'] as num?)?.toInt(),
+      visitLimit: (membership?['visit_limit'] as num?)?.toInt(),
+    );
+  }
+
+  @override
+  Future<CheckInDay> checkInsToday(String gymId) async {
+    final r = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.gymCheckIns(gymId),
+    );
+    final d = _data(r.data);
+    return CheckInDay(
+      visits: (d['visits'] as num?)?.toInt() ?? 0,
+      refused: (d['refused'] as num?)?.toInt() ?? 0,
+      entries: (d['check_ins'] as List? ?? const [])
+          .map((e) => _map(e))
+          .map(
+            (e) => CheckInEntry(
+              id: _string(e, 'id'),
+              result: CheckInResult.fromApi(e['result'] as String?),
+              alreadyCheckedInToday: e['already_checked_in_today'] == true,
+              checkedInAt:
+                  DateTime.tryParse('${e['checked_in_at']}')?.toLocal() ??
+                  DateTime.now(),
+              memberName: e['member_name'] as String?,
+            ),
+          )
+          .toList(),
+    );
+  }
+
   MemberDetail _detail(Map<String, dynamic> d) => MemberDetail(
     member: _member(_map(d['member'])),
     memberships: (d['memberships'] as List? ?? const [])
@@ -101,6 +160,7 @@ class DioMembersRepository implements MembersRepository {
     status: MemberStatus.fromApi(d['status'] as String?),
     standing: MemberStanding.fromApi(d['standing'] as String?),
     paidUntil: _date(d['paid_until']),
+    hasCheckInCode: d['has_check_in_code'] == true,
   );
 
   GymMembership _membership(Map<String, dynamic> d) => GymMembership(
