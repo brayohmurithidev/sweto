@@ -82,7 +82,11 @@ class GymPricingPlan {
     required this.amount,
     required this.billingPeriod,
     required this.isActive,
+    this.id,
   });
+
+  /// Server ID; null for a plan not saved yet.
+  final String? id;
   final String name;
   final int amount;
   final String billingPeriod;

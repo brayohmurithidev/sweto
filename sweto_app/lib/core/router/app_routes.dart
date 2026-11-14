@@ -40,6 +40,13 @@ class AppRoutes {
   static const unsupportedOnboardingName = 'unsupported-onboarding';
   static const unsupportedOnboardingPath = '/onboarding/unsupported';
 
+  static const membersName = 'members';
+  static const membersPath = '/gyms/:gymId/members';
+  static const addMemberName = 'add-member';
+  static const addMemberPath = '/gyms/:gymId/members/new';
+  static const memberDetailName = 'member-detail';
+  static const memberDetailPath = '/gyms/:gymId/members/:memberId';
+
   static const healthName = 'health';
   static const healthPath = '/health';
 }
