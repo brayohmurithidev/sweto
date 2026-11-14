@@ -544,7 +544,14 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
           onDeleteUploaded: _deleteUploaded,
         ),
         const SizedBox(height: AppSpacing.sm),
-        _field(_name, 'Gym name *', key: 'gym-name-field'),
+        _field(
+          _name,
+          'Gym name *',
+          key: 'gym-name-field',
+          onChanged: (_) {
+            if (_error != null) setState(() => _error = null);
+          },
+        ),
         PhoneNumberField(
           key: const Key('gym-phone-field'),
           fieldKey: const Key('gym-phone-input'),
@@ -928,6 +935,9 @@ class _GymPricingScreenState extends ConsumerState<GymPricingScreen> {
   }
 
   String _clean(String value) => value.replaceAll(',', '').trim();
+
+  bool _hasPrice(_PlanDraft plan) =>
+      (int.tryParse(_clean(plan.controller.text)) ?? 0) > 0;
   Future<void> _editPlan(_PlanDraft plan) async {
     final editor = TextEditingController(text: plan.controller.text);
     final saved = await showModalBottomSheet<bool>(
@@ -1008,6 +1018,7 @@ class _GymPricingScreenState extends ConsumerState<GymPricingScreen> {
             _gymId!,
             GymPricing(
               dayPasses: [_dayPass]
+                  .where(_hasPrice)
                   .map(
                     (p) => GymPricingPlan(
                       name: p.name,
@@ -1018,10 +1029,11 @@ class _GymPricingScreenState extends ConsumerState<GymPricingScreen> {
                   )
                   .toList(),
               membershipPlans: _plans
+                  .where(_hasPrice)
                   .map(
                     (p) => GymPricingPlan(
                       name: p.name,
-                      amount: int.tryParse(_clean(p.controller.text)) ?? 0,
+                      amount: int.parse(_clean(p.controller.text)),
                       billingPeriod: p.period,
                       isActive: p.active,
                     ),
@@ -2349,7 +2361,7 @@ class _GymLocationScreenState extends ConsumerState<GymLocationScreen> {
         setState(
           () => _locationError = error is _LocationMessage
               ? error.message
-              : 'Current location is unavailable.',
+              : 'We couldn’t find your location. Drag the map to your gym instead.',
         );
     } finally {
       if (mounted) setState(() => _locating = false);
@@ -3518,10 +3530,7 @@ class _VerificationPendingScreenState
 }
 
 class _OnboardingScaffold extends StatelessWidget {
-  const _OnboardingScaffold({
-    required this.child,
-    this.showAccountMenu = true,
-  });
+  const _OnboardingScaffold({required this.child, this.showAccountMenu = true});
   final Widget child;
 
   /// Shows a top-right menu with "Log out" so an owner is never stuck in
