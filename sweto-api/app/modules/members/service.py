@@ -251,12 +251,12 @@ class GymMemberService:
         )
         await self.session.commit()
 
-        sms = await self._notify_payment(gym, member, membership)
+        sms = await self.notify_payment(gym, member, membership)
         detail = await self._detail(gym, member.id)
         recorded = next(m for m in detail.memberships if m.id == membership.id)
         return RecordCashPaymentData(member=detail.member, membership=recorded, sms=sms)
 
-    async def _notify_payment(
+    async def notify_payment(
         self, gym: Gym, member: GymMember, membership: GymMembership
     ) -> MemberMessageStatus | None:
         """The first payment brings a welcome with a fresh check-in code;

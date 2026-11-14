@@ -16,3 +16,19 @@ class GymMemberArchivedError(MemberError):
 
 class InvalidMembershipPaymentError(MemberError):
     """A cash payment cannot be recorded as asked."""
+
+
+class MpesaNotConfiguredError(MemberError):
+    """M-Pesa payments are switched off on this server."""
+
+
+class MpesaPaymentPendingError(MemberError):
+    """An M-Pesa prompt for this member is still waiting for an answer."""
+
+
+class MpesaRequestFailedError(MemberError):
+    """M-Pesa refused or didn't answer the payment request."""
+
+
+class PaymentNotFoundError(MemberError):
+    """The payment does not exist in this gym."""

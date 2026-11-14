@@ -193,3 +193,32 @@ class CheckInDayData(BaseModel):
     visits: int = Field(description="Members let in, each counted once a day.")
     refused: int
     check_ins: list[CheckInLogEntry]
+
+
+class RequestMpesaPaymentRequest(BaseModel):
+    plan_id: UUID
+    amount: int | None = Field(
+        default=None,
+        gt=0,
+        le=250_000,
+        description="Whole KES. Defaults to the plan's price.",
+    )
+    phone_number: str | None = Field(
+        default=None,
+        min_length=3,
+        max_length=32,
+        description="Phone to prompt; defaults to the member's own number.",
+    )
+
+
+class MpesaPaymentData(BaseModel):
+    payment_id: UUID
+    member_id: UUID
+    status: PaymentStatus
+    amount: Decimal
+    currency: str
+    plan_name: str
+    message: str = Field(description="Plain words for staff about where it stands.")
+    receipt: str | None = None
+    paid_until: date | None = None
+    sms: MemberMessageStatus | None = None

@@ -12,6 +12,10 @@ from app.modules.auth.whatsapp_webhook_router import (
 )
 from app.modules.gyms.router import router as gym_router
 from app.modules.members.check_in_router import router as check_in_router
+from app.modules.members.payments_router import (
+    callback_router as mpesa_callback_router,
+)
+from app.modules.members.payments_router import router as payments_router
 from app.modules.members.router import router as member_router
 from app.modules.profiles.router import (
     account_router,
@@ -32,6 +36,8 @@ api_router.include_router(profile_router)
 api_router.include_router(gym_router)
 api_router.include_router(member_router)
 api_router.include_router(check_in_router)
+api_router.include_router(payments_router)
+api_router.include_router(mpesa_callback_router)
 if settings.app_environment in {"local", "development", "testing"}:
     from app.modules.gyms.dev_router import router as development_gym_router
 

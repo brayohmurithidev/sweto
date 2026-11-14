@@ -54,6 +54,12 @@ class MemberMessageStatus(StrEnum):
     FAILED = "failed"
 
 
+class PaymentTransactionStatus(StrEnum):
+    PENDING = "pending"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
 class PaymentMethod(StrEnum):
     CASH = "cash"
     MPESA = "mpesa"

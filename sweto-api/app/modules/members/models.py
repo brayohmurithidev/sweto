@@ -35,6 +35,7 @@ from app.modules.members.enums import (
     MemberMessageStatus,
     PaymentMethod,
     PaymentStatus,
+    PaymentTransactionStatus,
 )
 
 
@@ -272,3 +273,48 @@ class MemberMessage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class PaymentTransaction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """One attempt to collect a payment through a provider (an STK Push).
+
+    Kept apart from Payment so a retry is a new attempt on the same payment
+    and every provider answer can be reconciled. Only what's needed to match
+    and audit is stored: no callback bodies, which carry the payer's number.
+    """
+
+    __tablename__ = "payment_transactions"
+    __table_args__ = (
+        UniqueConstraint(
+            "checkout_request_id", name="uq_payment_transactions_checkout"
+        ),
+        UniqueConstraint("provider_receipt", name="uq_payment_transactions_receipt"),
+        Index("ix_payment_transactions_status_requested", "status", "requested_at"),
+    )
+
+    payment_id: Mapped[UUID] = mapped_column(
+        ForeignKey("payments.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    gym_id: Mapped[UUID] = mapped_column(
+        ForeignKey("gyms.id", ondelete="CASCADE"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(20), nullable=False)
+    merchant_request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    checkout_request_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    amount: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    status: Mapped[PaymentTransactionStatus] = mapped_column(
+        string_enum(PaymentTransactionStatus, name="payment_transaction_status"),
+        nullable=False,
+    )
+    result_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Short reason category or provider description, never a phone number.
+    result_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    provider_receipt: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    payment: Mapped[Payment] = relationship()
