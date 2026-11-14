@@ -1,7 +1,9 @@
 from typing import Protocol
 
+from app.integrations.delivery import OTPDeliveryError, OTPSender
 
-class SMSDeliveryError(Exception):
+
+class SMSDeliveryError(OTPDeliveryError):
     """Raised by an SMS provider when a message could not be handed over.
 
     Providers raise this for every delivery failure they can detect: the
@@ -10,13 +12,8 @@ class SMSDeliveryError(Exception):
     the OTP or any credential, because callers may log it.
     """
 
-    def __init__(self, reason: str, *, retryable: bool = True) -> None:
-        self.reason = reason
-        self.retryable = retryable
-        super().__init__(reason)
 
-
-class SMSProvider(Protocol):
+class SMSProvider(OTPSender, Protocol):
     """Interface implemented by all SMS providers.
 
     Contract:
@@ -25,13 +22,3 @@ class SMSProvider(Protocol):
     - Never log the OTP code or provider credentials.
     - Respect cancellation: the caller enforces an overall timeout.
     """
-
-    async def send_otp(
-        self,
-        *,
-        phone_number: str,
-        otp_code: str,
-        expires_in_seconds: int,
-    ) -> None:
-        """Send an authentication OTP to an E.164 phone number."""
-        ...

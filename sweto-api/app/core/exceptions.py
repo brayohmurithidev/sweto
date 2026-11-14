@@ -27,6 +27,7 @@ from app.modules.auth.exceptions import (
     OTPChallengeConsumedError,
     OTPChallengeExpiredError,
     OTPChallengeNotFoundError,
+    OTPChannelUnavailableError,
     OTPDeliveryFailedError,
     OTPResendCooldownError,
     PasswordChangeRequiredError,
@@ -175,7 +176,7 @@ async def otp_delivery_failed_handler(
     _: Request,
     exception: Exception,
 ) -> JSONResponse:
-    """Return a retryable error when the SMS provider could not send the code."""
+    """Return a 503 when the channel's provider could not send the code."""
 
     if not isinstance(exception, OTPDeliveryFailedError):
         raise exception
@@ -187,7 +188,32 @@ async def otp_delivery_failed_handler(
             "error": {
                 "code": "OTP_DELIVERY_FAILED",
                 "message": str(exception),
-                "details": {},
+                "details": {
+                    "channel": exception.channel.value,
+                    "retryable": exception.retryable,
+                },
+            },
+        },
+    )
+
+
+async def otp_channel_unavailable_handler(
+    _: Request,
+    exception: Exception,
+) -> JSONResponse:
+    """Return a 503 when no provider is configured for the number's channel."""
+
+    if not isinstance(exception, OTPChannelUnavailableError):
+        raise exception
+
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={
+            "success": False,
+            "error": {
+                "code": "OTP_CHANNEL_UNAVAILABLE",
+                "message": str(exception),
+                "details": {"channel": exception.channel.value},
             },
         },
     )

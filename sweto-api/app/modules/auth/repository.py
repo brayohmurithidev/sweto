@@ -45,6 +45,9 @@ class OTPChallengeRepository:
 
         return result.scalar_one_or_none()
 
+    async def get_by_id(self, *, challenge_id: UUID) -> OTPChallenge | None:
+        return await self.session.get(OTPChallenge, challenge_id)
+
     async def get_by_id_for_update(
         self,
         *,
