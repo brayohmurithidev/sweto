@@ -4,15 +4,11 @@ The clock is pinned so dates are exact. Gyms default to Africa/Nairobi
 (UTC+3): 21:00 UTC is midnight at the gym.
 """
 
-from collections.abc import Iterator
-from datetime import UTC, datetime
 from typing import Any
 
 import pytest
 
-from app.main import app
-from app.shared.clock import get_clock
-from tests.integration.conftest import IntegrationAPI
+from tests.integration.conftest import IntegrationAPI, PinnedClock
 from tests.integration.test_gym_owner_journey import (
     FakeStorage,
     Owner,
@@ -23,30 +19,11 @@ from tests.integration.test_gym_owner_journey import (
 pytestmark = pytest.mark.usefixtures("pinned_clock")
 
 
-class PinnedClock:
-    def __init__(self) -> None:
-        # 09:00 on 14 Nov 2026 in Nairobi.
-        self.now = datetime(2026, 11, 14, 6, 0, tzinfo=UTC)
-
-    def __call__(self) -> datetime:
-        return self.now
-
-    def set(self, iso: str) -> None:
-        self.now = datetime.fromisoformat(iso)
-
-
 @pytest.fixture
 def storage(monkeypatch: pytest.MonkeyPatch) -> FakeStorage:
     fake = FakeStorage()
     monkeypatch.setattr("app.modules.gyms.router.S3Storage", lambda _settings: fake)
     return fake
-
-
-@pytest.fixture
-def pinned_clock(api: IntegrationAPI) -> Iterator[PinnedClock]:
-    clock = PinnedClock()
-    app.dependency_overrides[get_clock] = lambda: clock
-    yield clock
 
 
 PLANS = {

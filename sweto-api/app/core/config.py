@@ -95,6 +95,11 @@ class Settings(BaseSettings):
     otp_delivery_status_ip_limit: int = 120
     otp_delivery_status_ip_window_seconds: int = 900
 
+    # Every check-in attempt at a gym counts, so codes can't be guessed
+    # faster than a door could ever let people in.
+    check_in_attempt_limit: int = 30
+    check_in_attempt_window_seconds: int = 60
+
     password_login_email_limit: int = 5
     password_login_email_window_seconds: int = 900
     password_login_ip_limit: int = 20

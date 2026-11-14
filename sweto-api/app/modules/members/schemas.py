@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.modules.gyms.enums import MembershipBillingPeriod
 from app.modules.members.enums import (
+    CheckInResult,
     GymMembershipStatus,
     GymMemberStatus,
     MemberStanding,
@@ -78,6 +79,7 @@ class GymMembershipData(BaseModel):
     starts_on: date
     ends_on: date
     status: GymMembershipStatus
+    visit_limit: int | None
     payments: list[PaymentData]
 
 
@@ -88,6 +90,7 @@ class GymMemberData(BaseModel):
     status: GymMemberStatus
     standing: MemberStanding
     paid_until: date | None
+    has_check_in_code: bool
     created_at: datetime
     updated_at: datetime
 
@@ -107,3 +110,62 @@ class GymMemberDetailData(BaseModel):
 class RecordCashPaymentData(BaseModel):
     member: GymMemberData
     membership: GymMembershipData
+
+
+class CheckInCodeData(BaseModel):
+    """Shown once: only a hash is kept, so a lost code is replaced, not shown."""
+
+    member_id: UUID
+    code: str = Field(description="Display form, e.g. 7KQ2-M9XD.")
+    qr_payload: str = Field(description="What the member's QR code encodes.")
+
+
+class CheckInRequest(BaseModel):
+    code: str = Field(
+        min_length=1,
+        max_length=64,
+        description="Typed code (any case, dashes and spaces ignored) or the "
+        "scanned QR payload.",
+    )
+
+
+class CheckInMemberData(BaseModel):
+    id: UUID
+    full_name: str
+    standing: MemberStanding
+    paid_until: date | None
+
+
+class CheckInMembershipData(BaseModel):
+    plan_name: str
+    starts_on: date
+    ends_on: date
+    visit_limit: int | None
+    visits_used: int
+
+
+class CheckInData(BaseModel):
+    id: UUID
+    result: CheckInResult
+    allowed: bool
+    already_checked_in_today: bool
+    message: str
+    checked_in_at: datetime
+    member: CheckInMemberData | None
+    membership: CheckInMembershipData | None
+
+
+class CheckInLogEntry(BaseModel):
+    id: UUID
+    result: CheckInResult
+    already_checked_in_today: bool
+    checked_in_at: datetime
+    member_id: UUID | None
+    member_name: str | None
+
+
+class CheckInDayData(BaseModel):
+    date: date
+    visits: int = Field(description="Members let in, each counted once a day.")
+    refused: int
+    check_ins: list[CheckInLogEntry]

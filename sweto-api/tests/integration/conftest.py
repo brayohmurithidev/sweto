@@ -10,6 +10,7 @@ import subprocess
 import sys
 from collections.abc import AsyncIterator, Iterator
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -32,6 +33,7 @@ from app.integrations.whatsapp.dependencies import get_whatsapp_provider
 from app.main import app
 from app.rate_limit.dependencies import get_rate_limiter
 from app.rate_limit.memory import MemoryRateLimiter
+from app.shared.clock import get_clock
 
 API_ROOT = Path(__file__).resolve().parents[2]
 TEST_DATABASE_URL = os.environ.get("SWETO_TEST_DATABASE_URL")
@@ -166,4 +168,25 @@ async def api(
         app.dependency_overrides.clear()
 
 
-__all__ = ["IntegrationAPI", "RecordingSMSProvider", "SMSDeliveryError"]
+class PinnedClock:
+    """Stands in for app.shared.clock so tests can choose "now"."""
+
+    def __init__(self) -> None:
+        # 09:00 on 14 Nov 2026 in Nairobi.
+        self.now = datetime(2026, 11, 14, 6, 0, tzinfo=UTC)
+
+    def __call__(self) -> datetime:
+        return self.now
+
+    def set(self, iso: str) -> None:
+        self.now = datetime.fromisoformat(iso)
+
+
+@pytest.fixture
+def pinned_clock(api: IntegrationAPI) -> PinnedClock:
+    clock = PinnedClock()
+    app.dependency_overrides[get_clock] = lambda: clock
+    return clock
+
+
+__all__ = ["IntegrationAPI", "PinnedClock", "RecordingSMSProvider", "SMSDeliveryError"]

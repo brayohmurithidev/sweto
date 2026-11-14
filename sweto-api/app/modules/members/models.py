@@ -10,11 +10,13 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     UniqueConstraint,
@@ -25,6 +27,7 @@ from app.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 from app.database.types import string_enum
 from app.modules.gyms.enums import MembershipBillingPeriod
 from app.modules.members.enums import (
+    CheckInResult,
     GymMembershipStatus,
     GymMemberStatus,
     PaymentMethod,
@@ -36,6 +39,9 @@ class GymMember(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "gym_members"
     __table_args__ = (
         UniqueConstraint("gym_id", "phone_number", name="uq_gym_members_gym_phone"),
+        UniqueConstraint(
+            "gym_id", "check_in_code_hash", name="uq_gym_members_gym_check_in_code"
+        ),
         Index("ix_gym_members_gym_status", "gym_id", "status"),
     )
 
@@ -53,8 +59,8 @@ class GymMember(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         default=GymMemberStatus.ACTIVE,
         server_default=GymMemberStatus.ACTIVE.value,
     )
-    # Set when check-in codes are issued (build-order PR 4); only a hash is
-    # stored, never the code itself.
+    # Keyed hash (HMAC) of the member's check-in code; the code itself is
+    # shown once when issued and never stored. Issuing a new one replaces it.
     check_in_code_hash: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
     memberships: Mapped[list["GymMembership"]] = relationship(
@@ -98,6 +104,8 @@ class GymMembership(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         string_enum(GymMembershipStatus, name="gym_membership_status"),
         nullable=False,
     )
+    # Plan's visit limit when it was bought (null = unlimited).
+    visit_limit: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     member: Mapped[GymMember] = relationship(back_populates="memberships")
     payments: Mapped[list["Payment"]] = relationship(
@@ -152,3 +160,40 @@ class Payment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     membership: Mapped[GymMembership] = relationship(back_populates="payments")
+
+
+class GymCheckIn(UUIDPrimaryKeyMixin, Base):
+    """One attempt at the door, allowed or not.
+
+    Refusals are kept too, so owners can see who tried to enter on an expired
+    plan. An unknown code has no member.
+    """
+
+    __tablename__ = "gym_check_ins"
+    __table_args__ = (
+        Index("ix_gym_check_ins_gym_checked_in_at", "gym_id", "checked_in_at"),
+        Index("ix_gym_check_ins_membership", "membership_id"),
+    )
+
+    gym_id: Mapped[UUID] = mapped_column(
+        ForeignKey("gyms.id", ondelete="CASCADE"), nullable=False
+    )
+    member_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("gym_members.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    membership_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("gym_memberships.id", ondelete="SET NULL"), nullable=True
+    )
+    result: Mapped[CheckInResult] = mapped_column(
+        string_enum(CheckInResult, name="check_in_result"), nullable=False
+    )
+    # A second allowed check-in on the same local day: let in, not a new visit.
+    repeat_visit: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
+    checked_in_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    checked_in_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
