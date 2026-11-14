@@ -206,7 +206,24 @@ class _DashboardState extends ConsumerState<GymOwnerDashboardScreen> {
                   ),
                 ],
               ),
-              if (!limited) ...[const SizedBox(height: 14), _membersCard()],
+              if (!limited) ...[
+                const SizedBox(height: 14),
+                _actionCard(
+                  key: const Key('dashboard-check-in'),
+                  icon: Icons.qr_code_scanner,
+                  title: 'Check in',
+                  subtitle: 'Scan a member\'s QR or type their code',
+                  routeName: AppRoutes.checkInName,
+                ),
+                const SizedBox(height: 10),
+                _actionCard(
+                  key: const Key('dashboard-members'),
+                  icon: Icons.people_outline,
+                  title: 'Members',
+                  subtitle: 'Add members, see who has expired, record cash',
+                  routeName: AppRoutes.membersName,
+                ),
+              ],
               const SizedBox(height: 24),
               Text('Tasks to Complete', style: AppTextStyles.titleLarge),
               const SizedBox(height: 10),
@@ -310,27 +327,28 @@ class _DashboardState extends ConsumerState<GymOwnerDashboardScreen> {
     child: const Text('Some features will unlock after your gym is verified.'),
   );
 
-  /// Entry to the member list; shown once the gym is verified.
-  Widget _membersCard() => Material(
+  /// Entry to a gym tool; shown once the gym is verified.
+  Widget _actionCard({
+    required Key key,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required String routeName,
+  }) => Material(
     color: AppColors.surface,
     borderRadius: BorderRadius.circular(AppRadius.lg),
     child: ListTile(
-      key: const Key('dashboard-members'),
+      key: key,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.lg),
         side: const BorderSide(color: AppColors.border),
       ),
-      leading: const Icon(Icons.people_outline, color: AppColors.primary),
-      title: const Text('Members'),
-      subtitle: Text(
-        'Add members, see who has expired, record cash',
-        style: AppTextStyles.bodySmall,
-      ),
+      leading: Icon(icon, color: AppColors.primary),
+      title: Text(title),
+      subtitle: Text(subtitle, style: AppTextStyles.bodySmall),
       trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-      onTap: () => context.pushNamed(
-        AppRoutes.membersName,
-        pathParameters: {'gymId': _gym!.id},
-      ),
+      onTap: () =>
+          context.pushNamed(routeName, pathParameters: {'gymId': _gym!.id}),
     ),
   );
 

@@ -18,7 +18,7 @@ import 'package:sweto_app/features/members/presentation/members_screen.dart';
 const _gymId = 'gym-1';
 final _today = DateTime(2026, 11, 14);
 
-GymMember _member(
+GymMember fakeMember(
   String id,
   String name, {
   MemberStanding standing = MemberStanding.active,
@@ -35,12 +35,12 @@ GymMember _member(
       : paidUntil ?? DateTime(2026, 12, 13),
 );
 
-DioException _apiError(String message) => DioException(
+DioException fakeApiError(String message) => DioException(
   requestOptions: RequestOptions(),
   error: ApiException(message: message, statusCode: 422),
 );
 
-class _FakeMembers implements MembersRepository {
+class FakeMembers implements MembersRepository {
   final members = <GymMember>[];
   final listCalls = <(MemberStanding?, String?)>[];
   final added = <(String, String)>[];
@@ -80,7 +80,7 @@ class _FakeMembers implements MembersRepository {
   }) async {
     if (addError != null) throw addError!;
     added.add((fullName, phoneNumber));
-    final member = _member(
+    final member = fakeMember(
       'm-new',
       fullName,
       standing: MemberStanding.noMembership,
@@ -108,6 +108,42 @@ class _FakeMembers implements MembersRepository {
         ],
       );
 
+  final issuedCodes = <String>[];
+  CheckInOutcome Function(String code)? checkInResult;
+  final checkInCodes = <String>[];
+  Object? checkInError;
+  var today = const CheckInDay(visits: 0, refused: 0, entries: []);
+
+  @override
+  Future<CheckInCode> issueCheckInCode(String gymId, String memberId) async {
+    issuedCodes.add(memberId);
+    final index = members.indexWhere((m) => m.id == memberId);
+    final m = members[index];
+    members[index] = GymMember(
+      id: m.id,
+      fullName: m.fullName,
+      phoneNumber: m.phoneNumber,
+      status: m.status,
+      standing: m.standing,
+      paidUntil: m.paidUntil,
+      hasCheckInCode: true,
+    );
+    return const CheckInCode(
+      code: '7KQ2-M9XD',
+      qrPayload: 'sweto:checkin:7KQ2M9XD',
+    );
+  }
+
+  @override
+  Future<CheckInOutcome> checkIn(String gymId, String code) async {
+    if (checkInError != null) throw checkInError!;
+    checkInCodes.add(code);
+    return checkInResult!(code);
+  }
+
+  @override
+  Future<CheckInDay> checkInsToday(String gymId) async => today;
+
   @override
   Future<GymMember> setArchived(
     String gymId,
@@ -124,7 +160,7 @@ class _FakeMembers implements MembersRepository {
     if (paymentError != null) throw paymentError!;
     payments.add((memberId, input));
     final index = members.indexWhere((m) => m.id == memberId);
-    members[index] = _member(memberId, members[index].fullName);
+    members[index] = fakeMember(memberId, members[index].fullName);
     return getMember(gymId, memberId);
   }
 }
@@ -160,7 +196,7 @@ class _FakePricing extends Fake implements GymOwnerRepository {
 
 Future<void> _pump(
   WidgetTester tester,
-  _FakeMembers members, {
+  FakeMembers members, {
   required String location,
 }) async {
   tester.view.physicalSize = const Size(1170, 2532);
@@ -208,22 +244,26 @@ void main() {
     testWidgets('tabs filter by standing and search narrows the list', (
       tester,
     ) async {
-      final repo = _FakeMembers()
+      final repo = FakeMembers()
         ..members.addAll([
-          _member('1', 'Achieng Otieno'),
-          _member(
+          fakeMember('1', 'Achieng Otieno'),
+          fakeMember(
             '2',
             'Brian Kiprop',
             standing: MemberStanding.expiring,
             paidUntil: DateTime(2026, 11, 18),
           ),
-          _member(
+          fakeMember(
             '3',
             'Chebet Wanjiku',
             standing: MemberStanding.expired,
             paidUntil: DateTime(2026, 11, 1),
           ),
-          _member('4', 'Daudi Mwangi', standing: MemberStanding.noMembership),
+          fakeMember(
+            '4',
+            'Daudi Mwangi',
+            standing: MemberStanding.noMembership,
+          ),
         ]);
       await _pump(tester, repo, location: '/gyms/$_gymId/members');
 
@@ -262,7 +302,7 @@ void main() {
     testWidgets('a very long name fits on one line without overflow', (
       tester,
     ) async {
-      final repo = _FakeMembers()..members.add(_member('1', 'Wanjiru ' * 12));
+      final repo = FakeMembers()..members.add(fakeMember('1', 'Wanjiru ' * 12));
       await _pump(tester, repo, location: '/gyms/$_gymId/members');
 
       expect(tester.takeException(), isNull);
@@ -274,7 +314,7 @@ void main() {
     testWidgets('a failed load shows a friendly error and retries', (
       tester,
     ) async {
-      final repo = _FakeMembers()
+      final repo = FakeMembers()
         ..listError = DioException(requestOptions: RequestOptions());
       await _pump(tester, repo, location: '/gyms/$_gymId/members');
 
@@ -283,7 +323,7 @@ void main() {
 
       repo
         ..listError = null
-        ..members.add(_member('1', 'Achieng Otieno'));
+        ..members.add(fakeMember('1', 'Achieng Otieno'));
       await tester.tap(find.text('Retry'));
       await tester.pumpAndSettle();
       expect(find.text('Achieng Otieno'), findsOneWidget);
@@ -294,7 +334,7 @@ void main() {
     testWidgets('name and phone are required and the phone must be valid', (
       tester,
     ) async {
-      final repo = _FakeMembers();
+      final repo = FakeMembers();
       await _pump(tester, repo, location: '/gyms/$_gymId/members/new');
 
       await tester.tap(find.byKey(const Key('add-member-submit')));
@@ -319,7 +359,7 @@ void main() {
     testWidgets('adds the member and records the first cash payment', (
       tester,
     ) async {
-      final repo = _FakeMembers();
+      final repo = FakeMembers();
       await _pump(tester, repo, location: '/gyms/$_gymId/members');
       expect(find.byKey(const Key('members-empty')), findsOneWidget);
       await tester.tap(find.byKey(const Key('add-member-button')));
@@ -368,8 +408,8 @@ void main() {
     testWidgets('a duplicate phone keeps the form open with the reason', (
       tester,
     ) async {
-      final repo = _FakeMembers()
-        ..addError = _apiError(
+      final repo = FakeMembers()
+        ..addError = fakeApiError(
           'Another member of this gym already uses this phone number.',
         );
       await _pump(tester, repo, location: '/gyms/$_gymId/members/new');
@@ -396,9 +436,9 @@ void main() {
 
   group('record cash payment', () {
     testWidgets('success updates the member to paid', (tester) async {
-      final repo = _FakeMembers()
+      final repo = FakeMembers()
         ..members.add(
-          _member(
+          fakeMember(
             '1',
             'Achieng Otieno',
             standing: MemberStanding.expired,
@@ -431,9 +471,9 @@ void main() {
     });
 
     testWidgets('failure keeps the sheet open with the reason', (tester) async {
-      final repo = _FakeMembers()
-        ..members.add(_member('1', 'Achieng Otieno'))
-        ..paymentError = _apiError(
+      final repo = FakeMembers()
+        ..members.add(fakeMember('1', 'Achieng Otieno'))
+        ..paymentError = fakeApiError(
           'That membership plan isn\'t available. Choose an active plan.',
         );
       await _pump(tester, repo, location: '/gyms/$_gymId/members/1');
@@ -451,6 +491,33 @@ void main() {
       );
       expect(find.byKey(const Key('cash-payment-submit')), findsOneWidget);
       expect(repo.payments, isEmpty);
+    });
+  });
+
+  group('check-in code', () {
+    testWidgets('shows the new code and QR once, confirming a replacement', (
+      tester,
+    ) async {
+      final repo = FakeMembers()
+        ..members.add(fakeMember('1', 'Achieng Otieno'));
+      await _pump(tester, repo, location: '/gyms/$_gymId/members/1');
+
+      await tester.tap(find.byKey(const Key('issue-check-in-code')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('check-in-qr')), findsOneWidget);
+      expect(find.text('7KQ2-M9XD'), findsOneWidget);
+      await tester.tap(find.text('Done'));
+      await tester.pumpAndSettle();
+      expect(repo.issuedCodes, ['1']);
+
+      // Now issued: a new code needs a confirmation first.
+      expect(find.text('New code'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('issue-check-in-code')));
+      await tester.pumpAndSettle();
+      expect(find.text('Issue a new code?'), findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(repo.issuedCodes, ['1']);
     });
   });
 }
