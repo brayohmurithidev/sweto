@@ -222,3 +222,34 @@ String? normalizeCheckInCode(String raw) {
   }
   return value;
 }
+
+enum PaymentState {
+  pending,
+  completed,
+  failed;
+
+  static PaymentState fromApi(String? value) => switch (value) {
+    'completed' => completed,
+    'failed' => failed,
+    _ => pending,
+  };
+}
+
+/// An M-Pesa payment request and where it stands.
+class MpesaPayment {
+  const MpesaPayment({
+    required this.paymentId,
+    required this.state,
+    required this.message,
+    this.receipt,
+    this.paidUntil,
+  });
+
+  final String paymentId;
+  final PaymentState state;
+
+  /// Plain words from the server, e.g. "The member cancelled the M-Pesa prompt."
+  final String message;
+  final String? receipt;
+  final DateTime? paidUntil;
+}

@@ -31,6 +31,13 @@ abstract interface class MembersRepository {
     String memberId,
     CashPaymentInput input,
   );
+  Future<MpesaPayment> requestMpesaPayment(
+    String gymId,
+    String memberId, {
+    required String planId,
+    int? amount,
+  });
+  Future<MpesaPayment> getPayment(String gymId, String paymentId);
   Future<CheckInCode> issueCheckInCode(String gymId, String memberId);
   Future<CheckInOutcome> checkIn(String gymId, String code);
   Future<CheckInDay> checkInsToday(String gymId);

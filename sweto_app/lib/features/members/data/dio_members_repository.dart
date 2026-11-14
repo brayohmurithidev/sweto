@@ -112,6 +112,36 @@ class DioMembersRepository implements MembersRepository {
   }
 
   @override
+  Future<MpesaPayment> requestMpesaPayment(
+    String gymId,
+    String memberId, {
+    required String planId,
+    int? amount,
+  }) async {
+    final r = await _dio.post<Map<String, dynamic>>(
+      ApiEndpoints.gymMemberMpesaPayment(gymId, memberId),
+      data: {'plan_id': planId, 'amount': ?amount},
+    );
+    return _mpesa(_data(r.data));
+  }
+
+  @override
+  Future<MpesaPayment> getPayment(String gymId, String paymentId) async {
+    final r = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.gymPayment(gymId, paymentId),
+    );
+    return _mpesa(_data(r.data));
+  }
+
+  MpesaPayment _mpesa(Map<String, dynamic> d) => MpesaPayment(
+    paymentId: _string(d, 'payment_id'),
+    state: PaymentState.fromApi(d['status'] as String?),
+    message: d['message'] as String? ?? '',
+    receipt: d['receipt'] as String?,
+    paidUntil: _date(d['paid_until']),
+  );
+
+  @override
   Future<CheckInCode> issueCheckInCode(String gymId, String memberId) async {
     final r = await _dio.post<Map<String, dynamic>>(
       ApiEndpoints.gymMemberCheckInCode(gymId, memberId),

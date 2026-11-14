@@ -8,6 +8,7 @@ import 'package:sweto_app/features/members/domain/member_entities.dart';
 import 'package:sweto_app/features/members/presentation/check_in_code_dialog.dart';
 import 'package:sweto_app/features/members/presentation/member_formatting.dart';
 import 'package:sweto_app/features/members/presentation/members_providers.dart';
+import 'package:sweto_app/features/members/presentation/mpesa_payment_sheet.dart';
 import 'package:sweto_app/features/members/presentation/record_cash_payment_sheet.dart';
 import 'package:sweto_app/shared/widgets/app_primary_button.dart';
 import 'package:sweto_app/shared/widgets/sweto_dialog.dart';
@@ -110,6 +111,25 @@ class _MemberDetailState extends ConsumerState<MemberDetailScreen> {
       }
     } finally {
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _requestMpesa() async {
+    final member = _detail?.member;
+    if (member == null) return;
+    final paid = await showMpesaPaymentSheet(
+      context,
+      gymId: widget.gymId,
+      member: member,
+    );
+    if (!mounted) return;
+    await _load();
+    if (paid != null && mounted) {
+      showSwetoSnackBar(
+        context,
+        message: mpesaPaidMessage(paid),
+        type: SwetoSnackBarType.success,
+      );
     }
   }
 
@@ -241,6 +261,16 @@ class _MemberDetailState extends ConsumerState<MemberDetailScreen> {
                       key: const Key('record-cash-button'),
                       label: 'Record cash payment',
                       onPressed: _busy ? null : _recordPayment,
+                    ),
+                    const SizedBox(height: AppSpacing.xs),
+                    SizedBox(
+                      height: 52,
+                      child: OutlinedButton.icon(
+                        key: const Key('request-mpesa-button'),
+                        onPressed: _busy ? null : _requestMpesa,
+                        icon: const Icon(Icons.phone_android),
+                        label: const Text('Request M-Pesa payment'),
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.sm),
                     _checkInCodeCard(detail.member),
