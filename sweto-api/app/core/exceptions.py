@@ -62,6 +62,7 @@ from app.modules.members.exceptions import (
     GymMemberArchivedError,
     GymMemberNotFoundError,
     GymMemberPhoneTakenError,
+    InvalidFinanceMonthError,
     InvalidMembershipPaymentError,
     MpesaNotConfiguredError,
     MpesaPaymentPendingError,
@@ -672,6 +673,10 @@ _MEMBER_ERRORS: dict[type[Exception], tuple[int, str]] = {
     InvalidMembershipPaymentError: (
         status.HTTP_422_UNPROCESSABLE_CONTENT,
         "INVALID_MEMBERSHIP_PAYMENT",
+    ),
+    InvalidFinanceMonthError: (
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "INVALID_FINANCE_MONTH",
     ),
     MpesaNotConfiguredError: (
         status.HTTP_503_SERVICE_UNAVAILABLE,
