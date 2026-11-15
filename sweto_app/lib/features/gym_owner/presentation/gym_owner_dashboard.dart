@@ -7,6 +7,7 @@ import 'package:sweto_app/core/theme/radius.dart';
 import 'package:sweto_app/core/theme/text_styles.dart';
 import 'package:sweto_app/features/auth/presentation/session_controller.dart';
 import 'package:sweto_app/features/gym_owner/domain/gym_owner_entities.dart';
+import 'package:sweto_app/features/gym_owner/presentation/home/owner_shell.dart';
 import 'package:sweto_app/features/gym_owner/presentation/onboarding_coordinator.dart';
 import 'package:sweto_app/shared/widgets/sweto_dialog.dart';
 import 'package:sweto_app/shared/widgets/sweto_snackbar.dart';
@@ -137,6 +138,13 @@ class _DashboardState extends ConsumerState<GymOwnerDashboardScreen> {
     }
     final status = _verification?.status ?? 'not_submitted';
     final limited = status != 'approved';
+    if (!limited) {
+      return OwnerShell(
+        gymId: _gym!.id,
+        gymName: _gym!.name,
+        onLogout: _confirmLogout,
+      );
+    }
     // Once documents are submitted (pending) or approved there is nothing
     // for the owner to do on the verification step.
     final canEditVerification = status != 'approved' && status != 'pending';
@@ -206,24 +214,6 @@ class _DashboardState extends ConsumerState<GymOwnerDashboardScreen> {
                   ),
                 ],
               ),
-              if (!limited) ...[
-                const SizedBox(height: 14),
-                _actionCard(
-                  key: const Key('dashboard-check-in'),
-                  icon: Icons.qr_code_scanner,
-                  title: 'Check in',
-                  subtitle: 'Scan a member\'s QR or type their code',
-                  routeName: AppRoutes.checkInName,
-                ),
-                const SizedBox(height: 10),
-                _actionCard(
-                  key: const Key('dashboard-members'),
-                  icon: Icons.people_outline,
-                  title: 'Members',
-                  subtitle: 'Add members, see who has expired, record cash',
-                  routeName: AppRoutes.membersName,
-                ),
-              ],
               const SizedBox(height: 24),
               Text('Tasks to Complete', style: AppTextStyles.titleLarge),
               const SizedBox(height: 10),
@@ -325,31 +315,6 @@ class _DashboardState extends ConsumerState<GymOwnerDashboardScreen> {
       borderRadius: BorderRadius.circular(AppRadius.md),
     ),
     child: const Text('Some features will unlock after your gym is verified.'),
-  );
-
-  /// Entry to a gym tool; shown once the gym is verified.
-  Widget _actionCard({
-    required Key key,
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required String routeName,
-  }) => Material(
-    color: AppColors.surface,
-    borderRadius: BorderRadius.circular(AppRadius.lg),
-    child: ListTile(
-      key: key,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.lg),
-        side: const BorderSide(color: AppColors.border),
-      ),
-      leading: Icon(icon, color: AppColors.primary),
-      title: Text(title),
-      subtitle: Text(subtitle, style: AppTextStyles.bodySmall),
-      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-      onTap: () =>
-          context.pushNamed(routeName, pathParameters: {'gymId': _gym!.id}),
-    ),
   );
 
   Widget _stat(String label, String value, IconData icon) => Container(

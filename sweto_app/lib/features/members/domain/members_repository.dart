@@ -41,4 +41,5 @@ abstract interface class MembersRepository {
   Future<CheckInCode> issueCheckInCode(String gymId, String memberId);
   Future<CheckInOutcome> checkIn(String gymId, String code);
   Future<CheckInDay> checkInsToday(String gymId);
+  Future<DashboardSummary> getDashboard(String gymId);
 }

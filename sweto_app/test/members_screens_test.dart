@@ -177,6 +177,17 @@ class FakeMembers implements MembersRepository {
   @override
   Future<CheckInDay> checkInsToday(String gymId) async => today;
 
+  DashboardSummary? dashboard;
+  Object? dashboardError;
+  int dashboardLoads = 0;
+
+  @override
+  Future<DashboardSummary> getDashboard(String gymId) async {
+    dashboardLoads += 1;
+    if (dashboardError != null) throw dashboardError!;
+    return dashboard!;
+  }
+
   @override
   Future<GymMember> setSms(
     String gymId,
