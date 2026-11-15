@@ -10,7 +10,11 @@ membership is only extended when M-Pesa confirms the money.
    row and a `payment_transactions` row, then sends the STK Push. The app
    polls `GET /gyms/{gym_id}/payments/{payment_id}`.
 2. Safaricom posts the result to
-   `{MPESA_CALLBACK_BASE_URL}/api/v1/payments/mpesa/callback/{MPESA_CALLBACK_TOKEN}`.
+   `{MPESA_CALLBACK_BASE_URL}/api/v1/payments/stk/callback/{MPESA_CALLBACK_TOKEN}`.
+   Daraja doesn't call back to URLs containing words like "mpesa" or
+   "safaricom", so keep those out of `MPESA_CALLBACK_BASE_URL` too. The old
+   `/payments/mpesa/callback/...` path is still accepted for prompts sent
+   before this change.
    On success the membership's dates are fixed at that moment, by the gym's
    calendar (day after the current paid period, or today), and the member gets
    the welcome or receipt SMS if they agreed to SMS.
@@ -62,7 +66,7 @@ string. Requests are accepted without touching Safaricom and the API logs the
 checkout ID. Complete one yourself:
 
 ```bash
-curl -X POST "http://localhost:8000/api/v1/payments/mpesa/callback/$MPESA_CALLBACK_TOKEN" \
+curl -X POST "http://localhost:8000/api/v1/payments/stk/callback/$MPESA_CALLBACK_TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"Body":{"stkCallback":{"MerchantRequestID":"SIM","CheckoutRequestID":"<checkout id from the log>","ResultCode":0,"ResultDesc":"ok","CallbackMetadata":{"Item":[{"Name":"Amount","Value":5000},{"Name":"MpesaReceiptNumber","Value":"SIM123ABC"}]}}}}'
 ```

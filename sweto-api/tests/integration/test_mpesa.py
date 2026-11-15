@@ -109,7 +109,7 @@ def callback_body(checkout: str, code: int = 0, amount: float = 5000) -> dict[st
 async def post_callback(
     api: IntegrationAPI, body: dict[str, Any], token: str = TOKEN
 ) -> Any:
-    return await api.client.post(f"/api/v1/payments/mpesa/callback/{token}", json=body)
+    return await api.client.post(f"/api/v1/payments/stk/callback/{token}", json=body)
 
 
 async def status_of(owner: Owner, gym_id: str, payment_id: str) -> dict[str, Any]:
@@ -138,7 +138,10 @@ async def test_a_prompt_is_sent_and_nothing_counts_until_mpesa_confirms(
     assert data["message"] == "Waiting for the member to enter their M-Pesa PIN."
     [push] = gateway.pushes
     assert (push["phone_number"], push["amount"]) == ("+254711000001", 5000)
-    assert push["callback_url"].endswith(f"/api/v1/payments/mpesa/callback/{TOKEN}")
+    assert push["callback_url"].endswith(f"/api/v1/payments/stk/callback/{TOKEN}")
+    # Daraja won't call back to URLs with these words in them.
+    assert "mpesa" not in push["callback_url"].lower()
+    assert "safaricom" not in push["callback_url"].lower()
     assert await paid_until(owner, gym_id, member_id) is None
 
 
@@ -360,3 +363,23 @@ async def test_reconcile_settles_lost_callbacks_and_gives_up_on_silence(
     status = await status_of(owner, gym_id, silent["payment_id"])
     assert status["status"] == "failed"
     assert status["message"] == "The member didn't answer the M-Pesa prompt in time."
+
+
+async def test_prompts_sent_before_the_path_change_still_settle(
+    api: IntegrationAPI, storage: FakeStorage, gateway: FakeGateway
+) -> None:
+    owner, gym_id, member_id, plans = await member_with_plan(api, storage)
+    payment_id = (await request(owner, gym_id, member_id, plans["Monthly"])).json()[
+        "data"
+    ]["payment_id"]
+
+    response = await api.client.post(
+        f"/api/v1/payments/mpesa/callback/{TOKEN}", json=callback_body("ws_CO_1")
+    )
+
+    assert response.json() == {"ResultCode": 0, "ResultDesc": "Accepted"}
+    assert (await status_of(owner, gym_id, payment_id))["status"] == "completed"
+    wrong = await api.client.post(
+        "/api/v1/payments/mpesa/callback/wrong-token", json=callback_body("ws_CO_1")
+    )
+    assert wrong.status_code == 404
