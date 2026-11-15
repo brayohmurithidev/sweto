@@ -201,6 +201,43 @@ class DioMembersRepository implements MembersRepository {
     );
   }
 
+  @override
+  Future<DashboardSummary> getDashboard(String gymId) async {
+    final r = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.gymDashboard(gymId),
+    );
+    final d = _data(r.data);
+    final revenue = _map(d['revenue']);
+    return DashboardSummary(
+      gymName: _string(d, 'gym_name'),
+      ownerFirstName: d['owner_first_name'] as String?,
+      activeMembers: (d['active_members'] as num?)?.toInt() ?? 0,
+      expiringMembers: (d['expiring_members'] as num?)?.toInt() ?? 0,
+      checkInsToday: (d['check_ins_today'] as num?)?.toInt() ?? 0,
+      revenueThisMonth: _number(revenue['this_month']),
+      currency: revenue['currency'] as String? ?? 'KES',
+      revenueChangePercent: (revenue['change_percent'] as num?)?.toDouble(),
+      dailyRevenue: (revenue['daily'] as List? ?? const [])
+          .map((day) => _number(_map(day)['amount']))
+          .toList(),
+      recentActivity: (d['recent_activity'] as List? ?? const [])
+          .map((item) => _map(item))
+          .map(
+            (item) => ActivityItem(
+              kind: item['kind'] as String? ?? '',
+              at:
+                  DateTime.tryParse('${item['at']}')?.toLocal() ??
+                  DateTime.now(),
+              detail: item['detail'] as String? ?? '',
+              ok: item['ok'] != false,
+              memberId: item['member_id'] as String?,
+              memberName: item['member_name'] as String?,
+            ),
+          )
+          .toList(),
+    );
+  }
+
   MemberDetail _detail(Map<String, dynamic> d) => MemberDetail(
     member: _member(_map(d['member'])),
     memberships: (d['memberships'] as List? ?? const [])

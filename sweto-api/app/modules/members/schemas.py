@@ -222,3 +222,41 @@ class MpesaPaymentData(BaseModel):
     receipt: str | None = None
     paid_until: date | None = None
     sms: MemberMessageStatus | None = None
+
+
+class DailyRevenue(BaseModel):
+    date: date
+    amount: Decimal
+
+
+class RevenueSummary(BaseModel):
+    currency: str
+    this_month: Decimal
+    last_month: Decimal
+    change_percent: float | None = Field(
+        description="This month so far against all of last month; null when "
+        "last month had no revenue."
+    )
+    daily: list[DailyRevenue] = Field(
+        description="Each day of this month up to today, zeros included."
+    )
+
+
+class ActivityItem(BaseModel):
+    kind: str = Field(description="check_in, payment or member_added")
+    at: datetime
+    member_id: UUID | None
+    member_name: str | None
+    detail: str
+    ok: bool
+
+
+class DashboardData(BaseModel):
+    gym_name: str
+    owner_first_name: str | None
+    today: date
+    active_members: int
+    expiring_members: int
+    check_ins_today: int
+    revenue: RevenueSummary
+    recent_activity: list[ActivityItem]

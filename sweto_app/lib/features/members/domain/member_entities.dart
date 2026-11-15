@@ -253,3 +253,52 @@ class MpesaPayment {
   final String? receipt;
   final DateTime? paidUntil;
 }
+
+class ActivityItem {
+  const ActivityItem({
+    required this.kind,
+    required this.at,
+    required this.detail,
+    required this.ok,
+    this.memberId,
+    this.memberName,
+  });
+
+  /// check_in, payment or member_added
+  final String kind;
+  final DateTime at;
+  final String detail;
+  final bool ok;
+  final String? memberId;
+  final String? memberName;
+}
+
+class DashboardSummary {
+  const DashboardSummary({
+    required this.gymName,
+    required this.activeMembers,
+    required this.expiringMembers,
+    required this.checkInsToday,
+    required this.revenueThisMonth,
+    required this.currency,
+    required this.dailyRevenue,
+    required this.recentActivity,
+    this.ownerFirstName,
+    this.revenueChangePercent,
+  });
+
+  final String gymName;
+  final String? ownerFirstName;
+  final int activeMembers;
+  final int expiringMembers;
+  final int checkInsToday;
+  final double revenueThisMonth;
+  final String currency;
+
+  /// Null when last month had no revenue to compare with.
+  final double? revenueChangePercent;
+
+  /// Each day of this month so far.
+  final List<double> dailyRevenue;
+  final List<ActivityItem> recentActivity;
+}
