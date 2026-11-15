@@ -263,6 +263,74 @@ class DashboardData(BaseModel):
     recent_activity: list[ActivityItem]
 
 
+class MethodTotal(BaseModel):
+    method: PaymentMethod
+    amount: Decimal
+    count: int
+
+
+class PlanTotal(BaseModel):
+    plan_name: str
+    amount: Decimal
+    count: int
+
+
+class MonthTotal(BaseModel):
+    month: date = Field(description="First day of the month.")
+    amount: Decimal
+
+
+class FinanceSummaryData(BaseModel):
+    currency: str
+    month: date = Field(description="First day of the month shown.")
+    through: date = Field(
+        description="Last day counted: today for the current month, else the "
+        "month's last day."
+    )
+    is_current_month: bool
+    total: Decimal
+    payments_count: int
+    previous_month_total: Decimal = Field(
+        description="The month before, over the same days of the month as "
+        "``through`` so a month in progress is compared fairly."
+    )
+    change_percent: float | None = Field(
+        description="Null when the month before had no revenue in that span."
+    )
+    by_method: list[MethodTotal] = Field(description="Cash and M-Pesa, always both.")
+    by_plan: list[PlanTotal] = Field(description="Largest first.")
+    trend: list[MonthTotal] = Field(
+        description="Six months ending with this one, oldest first."
+    )
+    failed_mpesa_count: int = Field(
+        description="M-Pesa prompts this month that failed or were cancelled."
+    )
+    pending_mpesa_count: int = Field(
+        description="M-Pesa prompts this month still waiting for an answer."
+    )
+
+
+class FinanceTransactionData(BaseModel):
+    payment_id: UUID
+    member_id: UUID
+    member_name: str
+    plan_name: str
+    amount: Decimal
+    currency: str
+    method: PaymentMethod
+    status: PaymentStatus
+    at: datetime = Field(description="When it was paid, or asked for if not paid.")
+    receipt: str | None = Field(description="M-Pesa receipt number, when paid.")
+    recorded_by_name: str | None = Field(description="Who recorded a cash payment.")
+
+
+class FinanceTransactionListData(BaseModel):
+    transactions: list[FinanceTransactionData]
+    total: int
+    limit: int
+    offset: int
+
+
 class SaveMpesaAccountRequest(BaseModel):
     account_type: Literal["paybill", "till"]
     shortcode: str = Field(
