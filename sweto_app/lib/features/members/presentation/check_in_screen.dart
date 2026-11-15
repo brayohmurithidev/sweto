@@ -144,6 +144,7 @@ class _CheckInScreenState extends ConsumerState<CheckInScreen> {
                 key: const Key('check-in-code-field'),
                 controller: _code,
                 textCapitalization: TextCapitalization.characters,
+                inputFormatters: const [CheckInCodeInputFormatter()],
                 autocorrect: false,
                 enableSuggestions: false,
                 textInputAction: TextInputAction.go,
@@ -346,6 +347,40 @@ class _TodayList extends StatelessWidget {
               ),
             ),
       ],
+    );
+  }
+}
+
+/// Shapes typing into the code's own format as you go: capitals, only the
+/// characters codes use (no 0/O, 1/I/L), and the dash after four, so
+/// "tavmpfuz" reads "TAVM-PFUZ". A pasted QR payload keeps just its code.
+class CheckInCodeInputFormatter extends TextInputFormatter {
+  const CheckInCodeInputFormatter();
+
+  static const _alphabet = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    var raw = newValue.text;
+    final colon = raw.lastIndexOf(':');
+    if (colon >= 0) raw = raw.substring(colon + 1);
+    final chars = raw
+        .toUpperCase()
+        .split('')
+        .where(_alphabet.contains)
+        .take(8)
+        .toList();
+    // Typing the fourth character adds the dash; backspacing removes it.
+    final typingForward = newValue.text.length > oldValue.text.length;
+    final text = chars.length > 4 || (chars.length == 4 && typingForward)
+        ? '${chars.take(4).join()}-${chars.skip(4).join()}'
+        : chars.join();
+    return TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
     );
   }
 }

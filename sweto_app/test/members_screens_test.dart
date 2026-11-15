@@ -134,6 +134,9 @@ class FakeMembers implements MembersRepository {
   var today = const CheckInDay(visits: 0, refused: 0, entries: []);
 
   final mpesaRequests = <(String, String, int?)>[];
+
+  /// The number each prompt went to; null for the member's own.
+  final mpesaPhones = <String?>[];
   final paymentUpdates = <MpesaPayment>[];
   Object? mpesaError;
 
@@ -143,9 +146,11 @@ class FakeMembers implements MembersRepository {
     String memberId, {
     required String planId,
     int? amount,
+    String? phoneNumber,
   }) async {
     if (mpesaError != null) throw mpesaError!;
     mpesaRequests.add((memberId, planId, amount));
+    mpesaPhones.add(phoneNumber);
     return const MpesaPayment(
       paymentId: 'pay-1',
       state: PaymentState.pending,

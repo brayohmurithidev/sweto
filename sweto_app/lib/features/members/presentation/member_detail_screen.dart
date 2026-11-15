@@ -335,7 +335,8 @@ class _MemberDetailState extends ConsumerState<MemberDetailScreen> {
       title: const Text('Check-in code'),
       subtitle: Text(
         member.hasCheckInCode
-            ? 'Issued. Codes are shown once; a new one replaces it.'
+            ? 'Issued. Lost it? Tap New code and share the new one; the '
+                  'old code stops working.'
             : 'Not issued yet.',
         style: AppTextStyles.bodySmall,
       ),

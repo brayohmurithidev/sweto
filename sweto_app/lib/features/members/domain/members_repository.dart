@@ -31,11 +31,15 @@ abstract interface class MembersRepository {
     String memberId,
     CashPaymentInput input,
   );
+
+  /// [phoneNumber] (E.164) prompts someone else's phone, e.g. a parent
+  /// paying; null prompts the member's own number.
   Future<MpesaPayment> requestMpesaPayment(
     String gymId,
     String memberId, {
     required String planId,
     int? amount,
+    String? phoneNumber,
   });
   Future<MpesaPayment> getPayment(String gymId, String paymentId);
   Future<CheckInCode> issueCheckInCode(String gymId, String memberId);

@@ -2,6 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sweto_app/core/phone/phone_country.dart';
+import 'package:sweto_app/core/phone/phone_number.dart';
 import 'package:sweto_app/core/theme/colors.dart';
 import 'package:sweto_app/core/theme/radius.dart';
 import 'package:sweto_app/core/theme/spacing.dart';
@@ -13,6 +15,7 @@ import 'package:sweto_app/features/members/presentation/cash_payment_form.dart';
 import 'package:sweto_app/features/members/presentation/member_formatting.dart';
 import 'package:sweto_app/features/members/presentation/members_providers.dart';
 import 'package:sweto_app/shared/widgets/app_primary_button.dart';
+import 'package:sweto_app/shared/widgets/phone_number_field.dart';
 
 /// Sends an M-Pesa prompt and waits for the member's PIN.
 ///
@@ -70,6 +73,15 @@ class _MpesaSheetState extends ConsumerState<_MpesaSheet> {
   Timer? _poll;
   int _checks = 0;
 
+  /// Someone else pays: a parent, a partner, a second line.
+  bool _otherNumber = false;
+  final _phone = TextEditingController();
+  final _phoneFocus = FocusNode();
+  String? _phoneError;
+
+  /// The other number the current prompt went to, if any.
+  String? _payerE164;
+
   @override
   void initState() {
     super.initState();
@@ -79,7 +91,22 @@ class _MpesaSheetState extends ConsumerState<_MpesaSheet> {
   @override
   void dispose() {
     _poll?.cancel();
+    _phone.dispose();
+    _phoneFocus.dispose();
     super.dispose();
+  }
+
+  /// The number to prompt, or null for the member's own. Sets an error and
+  /// returns false when the other number isn't a valid Kenyan mobile: only
+  /// Safaricom lines can approve an M-Pesa prompt.
+  (bool, String?) _payerPhone() {
+    if (!_otherNumber) return (true, null);
+    final typed = _phone.text.trim();
+    if (!PhoneNumbers.isValid(kenya, typed)) {
+      setState(() => _phoneError = 'Enter the Safaricom number to prompt.');
+      return (false, null);
+    }
+    return (true, PhoneNumbers.toE164(kenya, typed));
   }
 
   Future<void> _loadPlans() async {
@@ -99,6 +126,9 @@ class _MpesaSheetState extends ConsumerState<_MpesaSheet> {
       setState(() => _error = 'Choose a plan and check the amount.');
       return;
     }
+    final (phoneOk, payerPhone) = _payerPhone();
+    if (!phoneOk) return;
+    _payerE164 = payerPhone;
     setState(() {
       _sending = true;
       _error = null;
@@ -111,6 +141,7 @@ class _MpesaSheetState extends ConsumerState<_MpesaSheet> {
             widget.member.id,
             planId: plan.id!,
             amount: _amount,
+            phoneNumber: payerPhone,
           );
       if (!mounted) return;
       setState(() {
@@ -153,6 +184,9 @@ class _MpesaSheetState extends ConsumerState<_MpesaSheet> {
       if (mounted) setState(() => _stillWaiting = true);
     }
   }
+
+  /// Who got the prompt: the member, or the other number that pays.
+  String _promptedName() => _payerE164 ?? widget.member.fullName;
 
   void _tryAgain() => setState(() {
     _payment = null;
@@ -203,6 +237,42 @@ class _MpesaSheetState extends ConsumerState<_MpesaSheet> {
             _amount = amount;
           }),
         ),
+      if (plans != null && plans.isNotEmpty) ...[
+        const SizedBox(height: AppSpacing.xs),
+        SwitchListTile(
+          key: const Key('mpesa-other-number'),
+          contentPadding: EdgeInsets.zero,
+          value: _otherNumber,
+          activeThumbColor: AppColors.primary,
+          title: const Text('Prompt a different number'),
+          subtitle: Text(
+            _otherNumber
+                ? 'Someone else pays, e.g. a parent. The membership is still '
+                      '${widget.member.fullName}\'s.'
+                : 'The prompt goes to ${widget.member.phoneNumber}.',
+            style: AppTextStyles.bodySmall,
+          ),
+          onChanged: _sending
+              ? null
+              : (on) => setState(() {
+                  _otherNumber = on;
+                  _phoneError = null;
+                }),
+        ),
+        if (_otherNumber)
+          PhoneNumberField(
+            key: const Key('mpesa-phone-field'),
+            fieldKey: const Key('mpesa-phone-input'),
+            compact: true,
+            countries: const [kenya],
+            country: kenya,
+            onCountryChanged: (_) {},
+            controller: _phone,
+            focusNode: _phoneFocus,
+            errorText: _phoneError,
+            onChanged: (_) => setState(() => _phoneError = null),
+          ),
+      ],
       if (_error != null) ...[
         const SizedBox(height: AppSpacing.sm),
         Text(
@@ -255,7 +325,7 @@ class _MpesaSheetState extends ConsumerState<_MpesaSheet> {
                   ? 'Still waiting for M-Pesa. You can close this: the '
                         'membership updates by itself when the payment '
                         'comes through.'
-                  : 'Waiting for ${widget.member.fullName} to enter their '
+                  : 'Waiting for ${_promptedName()} to enter their '
                         'M-Pesa PIN…',
               key: const Key('mpesa-message'),
               textAlign: TextAlign.center,
