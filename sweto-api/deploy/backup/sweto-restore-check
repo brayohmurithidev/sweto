@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Proves a backup can be restored, without touching the live database.
+#
+#   sudo sweto-restore-check /var/backups/sweto/staging/<file>.tar.age <identity>
+#
+# <identity> is the age PRIVATE key file. Put it on the server only for the
+# check, ideally in /dev/shm (memory only), and delete it afterwards.
+#
+# Restores into a throwaway database "sweto_restore_check", prints row counts
+# for the main tables and the newest payment, then drops it again.
+set -euo pipefail
+umask 077
+
+BACKUP="${1:?Usage: sweto-restore-check <backup.tar.age> <identity-file>}"
+IDENTITY="${2:?Usage: sweto-restore-check <backup.tar.age> <identity-file>}"
+CHECK_DB=sweto_restore_check
+
+WORK="$(mktemp -d)"
+cleanup() {
+  runuser -u postgres -- dropdb --if-exists "$CHECK_DB" || true
+  rm -rf "$WORK"
+}
+trap cleanup EXIT
+
+age --decrypt --identity "$IDENTITY" "$BACKUP" | tar -C "$WORK" -xf -
+DUMP="$(find "$WORK" -name 'sweto_*.dump' | head -1)"
+ENV_COPY="$(find "$WORK" -name '*.env' | head -1)"
+[[ -n "$DUMP" ]] || { echo "No database dump in this backup." >&2; exit 1; }
+[[ -n "$ENV_COPY" ]] || { echo "No env file in this backup." >&2; exit 1; }
+grep -q '^MPESA_CREDENTIALS_KEY=.' "$ENV_COPY" &&
+  echo "Env file present, with MPESA_CREDENTIALS_KEY."
+
+runuser -u postgres -- dropdb --if-exists "$CHECK_DB"
+runuser -u postgres -- createdb "$CHECK_DB"
+# Fed on stdin, so the decrypted dump never has to be readable by postgres.
+runuser -u postgres -- pg_restore --no-owner --no-acl --exit-on-error \
+  --dbname="$CHECK_DB" <"$DUMP"
+
+runuser -u postgres -- psql -X -A -t -d "$CHECK_DB" <<'SQL'
+SELECT 'gyms: '        || count(*) FROM gyms;
+SELECT 'members: '     || count(*) FROM gym_members;
+SELECT 'memberships: ' || count(*) FROM gym_memberships;
+SELECT 'payments: '    || count(*) FROM payments;
+SELECT 'check-ins: '   || count(*) FROM gym_check_ins;
+SELECT 'newest payment: ' || coalesce(max(created_at)::text, 'none') FROM payments;
+SELECT 'migration: '   || version_num FROM alembic_version;
+SQL
+echo "Restore check OK: $(basename "$BACKUP") restores cleanly."

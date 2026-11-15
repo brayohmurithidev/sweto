@@ -1,0 +1,13 @@
+# Backup of one SWETO environment: sweto-backup@staging, sweto-backup@prod.
+[Unit]
+Description=SWETO %i database backup
+After=postgresql.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/sweto-backup %i
+Nice=10
+IOSchedulingClass=idle
+SyslogIdentifier=sweto-backup-%i
+TimeoutStartSec=3600
