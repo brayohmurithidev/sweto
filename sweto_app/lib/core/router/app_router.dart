@@ -4,6 +4,9 @@ import 'package:go_router/go_router.dart';
 import 'package:sweto_app/core/config/config_providers.dart';
 import 'package:sweto_app/core/router/app_routes.dart';
 import 'package:sweto_app/core/router/session_redirect.dart';
+import 'package:sweto_app/features/admin/presentation/admin_gym_review_screen.dart';
+import 'package:sweto_app/features/admin/presentation/admin_home_screen.dart';
+import 'package:sweto_app/features/admin/presentation/admin_sign_in_screen.dart';
 import 'package:sweto_app/features/auth/presentation/session_controller.dart';
 import 'package:sweto_app/features/auth/presentation/phone_login_screen.dart';
 import 'package:sweto_app/features/auth/presentation/otp_verification_screen.dart';
@@ -226,6 +229,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) {
           return const PhoneLoginScreen();
         },
+      ),
+      GoRoute(
+        path: AppRoutes.adminSignInPath,
+        name: AppRoutes.adminSignInName,
+        builder: (context, state) => const AdminSignInScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.adminHomePath,
+        name: AppRoutes.adminHomeName,
+        builder: (context, state) => const AdminHomeScreen(),
+      ),
+      GoRoute(
+        path: AppRoutes.adminGymReviewPath,
+        name: AppRoutes.adminGymReviewName,
+        builder: (context, state) =>
+            AdminGymReviewScreen(gymId: state.pathParameters['gymId']!),
       ),
       // Developer diagnostics; not shipped in production builds.
       if (!isProduction)

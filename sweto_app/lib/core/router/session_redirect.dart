@@ -8,6 +8,7 @@ const publicRoutePaths = {
   AppRoutes.phoneLoginPath,
   AppRoutes.otpPath,
   AppRoutes.healthPath,
+  AppRoutes.adminSignInPath,
 };
 
 /// Sign-in routes a signed-in user should skip.
@@ -15,6 +16,7 @@ const signInRoutePaths = {
   AppRoutes.onboardingPath,
   AppRoutes.phoneLoginPath,
   AppRoutes.otpPath,
+  AppRoutes.adminSignInPath,
 };
 
 /// The single access rule for every route, driven by the session state.

@@ -70,12 +70,19 @@ class AuthUser {
     required this.mustChangePassword,
     this.phoneNumber,
     this.email,
+    this.role,
   });
 
   final String id;
   final bool mustChangePassword;
   final String? phoneNumber;
   final String? email;
+
+  /// Platform role: user, admin or super_admin.
+  final String? role;
+
+  /// SWETO staff who review gyms.
+  bool get isPlatformReviewer => role == 'admin' || role == 'super_admin';
 }
 
 class AccountOnboarding {

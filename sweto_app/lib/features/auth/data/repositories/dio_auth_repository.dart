@@ -77,6 +77,7 @@ class DioAuthRepository implements AuthRepository {
         mustChangePassword: data['must_change_password'] == true,
         phoneNumber: data['phone_number'] as String?,
         email: data['email'] as String?,
+        role: data['role'] as String?,
       ),
     );
   }

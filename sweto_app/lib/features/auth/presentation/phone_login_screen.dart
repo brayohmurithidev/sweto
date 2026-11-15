@@ -281,6 +281,18 @@ class _PhoneLoginScreenState extends ConsumerState<PhoneLoginScreen> {
 
                         const Spacer(),
 
+                        Center(
+                          child: TextButton(
+                            key: const Key('staff-sign-in-link'),
+                            onPressed: () =>
+                                context.pushNamed(AppRoutes.adminSignInName),
+                            child: Text(
+                              'SWETO staff? Sign in with email',
+                              style: AppTextStyles.bodySmall,
+                            ),
+                          ),
+                        ),
+
                         Padding(
                           padding: const EdgeInsets.symmetric(
                             vertical: AppSpacing.lg,

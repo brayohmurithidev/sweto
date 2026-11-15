@@ -20,6 +20,7 @@ enum OnboardingDestination {
   verification,
   verificationPending,
   home,
+  admin,
   memberComingSoon,
   unsupported,
 }
@@ -42,10 +43,21 @@ class OnboardingCoordinator {
   final GymOwnerRepository _gyms;
 
   Future<OnboardingDestination> resolve() async {
+    if (await _isPlatformReviewer()) return OnboardingDestination.admin;
     final account = await _auth.getOnboarding();
     final destination = await resolveAccount(account);
     _logAccount(account, destination);
     return destination;
+  }
+
+  /// SWETO staff have no gym; they go to the review queue. A failed check
+  /// falls through to the normal route, which reports its own errors.
+  Future<bool> _isPlatformReviewer() async {
+    try {
+      return (await _auth.getMe()).isPlatformReviewer;
+    } on Object {
+      return false;
+    }
   }
 
   Future<OnboardingDestination> resolveAccount(
