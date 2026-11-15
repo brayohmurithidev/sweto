@@ -117,10 +117,15 @@ class DioMembersRepository implements MembersRepository {
     String memberId, {
     required String planId,
     int? amount,
+    String? phoneNumber,
   }) async {
     final r = await _dio.post<Map<String, dynamic>>(
       ApiEndpoints.gymMemberMpesaPayment(gymId, memberId),
-      data: {'plan_id': planId, 'amount': ?amount},
+      data: {
+        'plan_id': planId,
+        'amount': ?amount,
+        'phone_number': ?phoneNumber,
+      },
     );
     return _mpesa(_data(r.data));
   }

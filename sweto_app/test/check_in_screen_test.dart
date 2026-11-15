@@ -65,7 +65,8 @@ void main() {
       ..checkInResult = (_) => _outcome(CheckInResult.allowed);
     await _pump(tester, repo);
 
-    for (final bad in ['', '7KQ2', '0OIL-1234', '7KQ2-M9XD-EXTRA']) {
+    // Extra characters can't be typed at all: the field stops at 8.
+    for (final bad in ['', '7KQ2', '0OIL-1234']) {
       await _type(tester, bad);
       expect(
         find.text('Enter the 8-character code, e.g. 7KQ2-M9XD.'),

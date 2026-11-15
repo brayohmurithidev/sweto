@@ -149,4 +149,39 @@ void main() {
     await tester.pumpAndSettle();
     expect(results, [null]);
   });
+
+  testWidgets('the prompt can go to a different number', (tester) async {
+    final repo = FakeMembers()..paymentUpdates.add(_pending);
+    await _open(tester, repo);
+
+    expect(find.text('The prompt goes to +254711000001.'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('mpesa-other-number')));
+    await tester.pumpAndSettle();
+
+    // Not a valid number yet: nothing is sent.
+    await tester.tap(find.byKey(const Key('mpesa-send')));
+    await tester.pump();
+    expect(find.text('Enter the Safaricom number to prompt.'), findsOneWidget);
+    expect(repo.mpesaRequests, isEmpty);
+
+    await tester.enterText(
+      find.byKey(const Key('mpesa-phone-input')),
+      '0722 000 123',
+    );
+    await tester.tap(find.byKey(const Key('mpesa-send')));
+    await tester.pump();
+    expect(repo.mpesaPhones, ['+254722000123']);
+    expect(
+      find.text('Waiting for +254722000123 to enter their M-Pesa PIN…'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets("by default the member's own number is prompted", (tester) async {
+    final repo = FakeMembers()..paymentUpdates.add(_pending);
+    await _open(tester, repo);
+    await tester.tap(find.byKey(const Key('mpesa-send')));
+    await tester.pump();
+    expect(repo.mpesaPhones, [null]);
+  });
 }
