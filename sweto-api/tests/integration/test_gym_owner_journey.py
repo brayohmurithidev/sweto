@@ -230,6 +230,80 @@ async def test_owner_onboards_is_approved_and_becomes_listed(
     assert gym["is_listed"] is True
 
 
+async def test_a_verified_gym_edits_its_details_and_stays_verified(
+    api: IntegrationAPI, storage: FakeStorage
+) -> None:
+    """The More tab edits a live gym through the onboarding endpoints."""
+
+    owner = await sign_in_owner(api)
+    gym_id = await complete_profile(owner, storage)
+    await upload_documents(owner, storage, gym_id)
+    await owner.call("POST", f"/gyms/{gym_id}/verification/submit")
+    admin = await sign_in_admin(api)
+    await admin.call(
+        "POST",
+        f"/admin/gym-verifications/{gym_id}/review",
+        json={"decision": "approve"},
+    )
+
+    edits = [
+        ("PATCH", "basic-information", {"name": "FlexFit Westlands 24/7"}),
+        (
+            "PATCH",
+            "location",
+            {
+                "address_line": "Sarit Centre, Karuna Road",
+                "neighbourhood": "Westlands",
+                "city": "Nairobi",
+                "latitude": "-1.2610",
+                "longitude": "36.8020",
+            },
+        ),
+        ("PUT", "amenities", {"amenity_ids": []}),
+        (
+            "PUT",
+            "operating-hours",
+            {
+                "operating_hours": [
+                    {"day_of_week": day, "is_24_hours": True} for day in range(7)
+                ]
+            },
+        ),
+        (
+            "PUT",
+            "pricing",
+            {
+                "day_passes": [{"name": "Day Pass", "amount": "600.00"}],
+                "membership_plans": [
+                    {
+                        "name": "Monthly",
+                        "amount": "5500.00",
+                        "billing_period": "monthly",
+                    }
+                ],
+            },
+        ),
+    ]
+    for method, path, body in edits:
+        response = await owner.call(method, f"/gyms/{gym_id}/{path}", json=body)
+        assert response.status_code == 200, (path, response.json())
+        state = response.json()["data"].get("onboarding")
+        if state is not None:
+            assert state["verification_status"] == "approved", path
+            assert state["limited_access"] is False, path
+
+    state = await onboarding(owner, gym_id)
+    assert (state["verification_status"], state["onboarding_completed"]) == (
+        "approved",
+        True,
+    )
+    gym = (await owner.call("GET", "/gyms/current")).json()["data"]
+    assert (gym["name"], gym["is_listed"]) == ("FlexFit Westlands 24/7", True)
+    assert gym["address_line"] == "Sarit Centre, Karuna Road"
+    hours = (await owner.call("GET", f"/gyms/{gym_id}/operating-hours")).json()
+    assert all(day["is_24_hours"] for day in hours["data"])
+
+
 async def test_rejected_gym_can_fix_and_resubmit(
     api: IntegrationAPI, storage: FakeStorage
 ) -> None:

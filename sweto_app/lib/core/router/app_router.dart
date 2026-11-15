@@ -148,6 +148,33 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             _onboardingPage(state, const GymOwnerDashboardScreen()),
       ),
       GoRoute(
+        path: AppRoutes.gymProfileSettingsPath,
+        name: AppRoutes.gymProfileSettingsName,
+        builder: (context, state) =>
+            const GymRegistrationScreen(inSettings: true),
+      ),
+      GoRoute(
+        path: AppRoutes.gymLocationSettingsPath,
+        name: AppRoutes.gymLocationSettingsName,
+        builder: (context, state) => const GymLocationScreen(inSettings: true),
+      ),
+      GoRoute(
+        path: AppRoutes.gymPlansSettingsPath,
+        name: AppRoutes.gymPlansSettingsName,
+        builder: (context, state) => const GymPricingScreen(inSettings: true),
+      ),
+      GoRoute(
+        path: AppRoutes.gymHoursSettingsPath,
+        name: AppRoutes.gymHoursSettingsName,
+        builder: (context, state) =>
+            const GymOperatingHoursScreen(inSettings: true),
+      ),
+      GoRoute(
+        path: AppRoutes.gymAmenitiesSettingsPath,
+        name: AppRoutes.gymAmenitiesSettingsName,
+        builder: (context, state) => const GymAmenitiesScreen(inSettings: true),
+      ),
+      GoRoute(
         path: AppRoutes.mpesaTillPath,
         name: AppRoutes.mpesaTillName,
         builder: (context, state) =>

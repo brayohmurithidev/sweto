@@ -148,6 +148,9 @@ class MpesaPaymentService:
             status=PaymentStatus.PENDING,
             payer_phone=phone,
             recorded_by_user_id=user_id,
+            # The app's clock, so a prompt that never completes still falls in
+            # the right day and month on the Finance tab.
+            created_at=now,
         )
         self.session.add(payment)
         await self.session.flush()

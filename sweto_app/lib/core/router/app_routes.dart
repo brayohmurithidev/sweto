@@ -53,6 +53,18 @@ class AppRoutes {
   static const mpesaTillName = 'mpesa-till';
   static const mpesaTillPath = '/gyms/:gymId/mpesa-till';
 
+  // A verified gym's details, edited from More.
+  static const gymProfileSettingsName = 'gym-settings-profile';
+  static const gymProfileSettingsPath = '/gyms/:gymId/settings/profile';
+  static const gymLocationSettingsName = 'gym-settings-location';
+  static const gymLocationSettingsPath = '/gyms/:gymId/settings/location';
+  static const gymPlansSettingsName = 'gym-settings-plans';
+  static const gymPlansSettingsPath = '/gyms/:gymId/settings/plans';
+  static const gymHoursSettingsName = 'gym-settings-hours';
+  static const gymHoursSettingsPath = '/gyms/:gymId/settings/hours';
+  static const gymAmenitiesSettingsName = 'gym-settings-amenities';
+  static const gymAmenitiesSettingsPath = '/gyms/:gymId/settings/amenities';
+
   static const healthName = 'health';
   static const healthPath = '/health';
 }

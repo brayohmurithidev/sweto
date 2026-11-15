@@ -32,3 +32,7 @@ class MpesaRequestFailedError(MemberError):
 
 class PaymentNotFoundError(MemberError):
     """The payment does not exist in this gym."""
+
+
+class InvalidFinanceMonthError(MemberError):
+    """The finance month asked for is in the future."""

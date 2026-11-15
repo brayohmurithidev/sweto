@@ -325,3 +325,117 @@ class MpesaTill {
 
   bool get isLive => mode == 'production';
 }
+
+/// Revenue for one plan in a month.
+class PlanRevenue {
+  const PlanRevenue({
+    required this.planName,
+    required this.amount,
+    required this.count,
+  });
+
+  final String planName;
+  final double amount;
+  final int count;
+}
+
+/// One month's revenue, for the trend chart.
+class MonthRevenue {
+  const MonthRevenue({required this.month, required this.amount});
+
+  /// First day of the month.
+  final DateTime month;
+  final double amount;
+}
+
+/// A month's money for the Finance tab, by the gym's calendar.
+class FinanceSummary {
+  const FinanceSummary({
+    required this.currency,
+    required this.month,
+    required this.through,
+    required this.isCurrentMonth,
+    required this.total,
+    required this.paymentsCount,
+    required this.previousMonthTotal,
+    required this.cashAmount,
+    required this.cashCount,
+    required this.mpesaAmount,
+    required this.mpesaCount,
+    required this.byPlan,
+    required this.trend,
+    this.changePercent,
+    this.failedMpesaCount = 0,
+    this.pendingMpesaCount = 0,
+  });
+
+  final String currency;
+
+  /// First day of the month shown.
+  final DateTime month;
+
+  /// Last day counted: today in the current month.
+  final DateTime through;
+  final bool isCurrentMonth;
+  final double total;
+  final int paymentsCount;
+
+  /// The month before, over the same days when this month is in progress.
+  final double previousMonthTotal;
+
+  /// Null when the month before had nothing to compare with.
+  final double? changePercent;
+  final double cashAmount;
+  final int cashCount;
+  final double mpesaAmount;
+  final int mpesaCount;
+
+  /// Largest first.
+  final List<PlanRevenue> byPlan;
+
+  /// Six months ending with [month], oldest first.
+  final List<MonthRevenue> trend;
+  final int failedMpesaCount;
+  final int pendingMpesaCount;
+}
+
+/// One payment on the Finance tab, paid or not.
+class FinanceTransaction {
+  const FinanceTransaction({
+    required this.paymentId,
+    required this.memberId,
+    required this.memberName,
+    required this.planName,
+    required this.amount,
+    required this.currency,
+    required this.isMpesa,
+    required this.state,
+    required this.at,
+    this.receipt,
+    this.recordedByName,
+  });
+
+  final String paymentId;
+  final String memberId;
+  final String memberName;
+  final String planName;
+  final double amount;
+  final String currency;
+  final bool isMpesa;
+  final PaymentState state;
+  final DateTime at;
+
+  /// M-Pesa receipt number, once paid.
+  final String? receipt;
+  final String? recordedByName;
+}
+
+class FinanceTransactionPage {
+  const FinanceTransactionPage({
+    required this.transactions,
+    required this.total,
+  });
+
+  final List<FinanceTransaction> transactions;
+  final int total;
+}

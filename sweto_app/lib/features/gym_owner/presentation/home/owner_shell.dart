@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:sweto_app/core/theme/colors.dart';
+import 'package:sweto_app/features/gym_owner/presentation/home/finance_tab.dart';
 import 'package:sweto_app/features/gym_owner/presentation/home/home_tab.dart';
 import 'package:sweto_app/features/gym_owner/presentation/home/more_tab.dart';
 import 'package:sweto_app/features/members/presentation/members_screen.dart';
 
-/// Bottom tabs for a verified gym: Home, Members, More.
+/// Bottom tabs for a verified gym: Home, Members, Finance, More.
 class OwnerShell extends StatefulWidget {
   const OwnerShell({
     required this.gymId,
@@ -25,12 +26,14 @@ class OwnerShell extends StatefulWidget {
 
 class _OwnerShellState extends State<OwnerShell> {
   final _home = GlobalKey<HomeTabState>();
+  final _finance = GlobalKey<FinanceTabState>();
   int _index = 0;
 
   void _select(int index) {
     setState(() => _index = index);
     // Numbers may have changed on another tab.
     if (index == 0) _home.currentState?.reload();
+    if (index == 2) _finance.currentState?.reload();
   }
 
   @override
@@ -49,6 +52,7 @@ class _OwnerShellState extends State<OwnerShell> {
               now: widget.now,
             ),
             MembersScreen(gymId: widget.gymId),
+            FinanceTab(key: _finance, gymId: widget.gymId),
             MoreTab(
               gymId: widget.gymId,
               gymName: widget.gymName,
@@ -73,6 +77,11 @@ class _OwnerShellState extends State<OwnerShell> {
             icon: Icon(Icons.people_outline),
             selectedIcon: Icon(Icons.people),
             label: 'Members',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.account_balance_wallet_outlined),
+            selectedIcon: Icon(Icons.account_balance_wallet),
+            label: 'Finance',
           ),
           NavigationDestination(icon: Icon(Icons.menu), label: 'More'),
         ],

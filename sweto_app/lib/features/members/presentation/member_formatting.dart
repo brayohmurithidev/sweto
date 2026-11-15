@@ -19,6 +19,33 @@ const _months = [
   'Dec',
 ];
 
+const _fullMonths = [
+  'January',
+  'February',
+  'March',
+  'April',
+  'May',
+  'June',
+  'July',
+  'August',
+  'September',
+  'October',
+  'November',
+  'December',
+];
+
+/// "Nov"
+String shortMonth(DateTime day) => _months[day.month - 1];
+
+/// "November 2026"
+String formatMonth(DateTime day) => '${_fullMonths[day.month - 1]} ${day.year}';
+
+/// "14 Nov, 09:05"
+String formatDayTime(DateTime at) =>
+    '${at.day} ${_months[at.month - 1]}, '
+    '${at.hour.toString().padLeft(2, '0')}:'
+    '${at.minute.toString().padLeft(2, '0')}';
+
 /// "13 Dec 2026"
 String formatDay(DateTime day) =>
     '${day.day} ${_months[day.month - 1]} ${day.year}';
