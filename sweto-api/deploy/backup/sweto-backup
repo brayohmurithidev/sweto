@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# Nightly backup of one SWETO environment: the database and its env file,
+# encrypted, kept on the server and copied to object storage.
+#
+#   sudo sweto-backup staging      # or: prod
+#
+# Settings come from /etc/sweto/backup.env (see backup.env.example). Every
+# backup is a single age-encrypted tar holding:
+#   - sweto_<env>.dump   pg_dump custom format (pg_restore reads it)
+#   - <env>.env          the API's settings, including MPESA_CREDENTIALS_KEY:
+#                        without it, the gyms' saved M-Pesa passkeys can't be
+#                        read after a restore.
+# Only the age public key is on the server. The private key that can open a
+# backup stays offline with the owner, so a copy of the bucket alone is
+# useless.
+set -euo pipefail
+umask 077
+
+ENVIRONMENT="${1:-}"
+case "$ENVIRONMENT" in
+  staging | prod) ;;
+  *)
+    echo "Usage: sweto-backup staging|prod" >&2
+    exit 2
+    ;;
+esac
+
+SETTINGS=/etc/sweto/backup.env
+if [[ ! -r "$SETTINGS" ]]; then
+  echo "Missing $SETTINGS (see backup.env.example)." >&2
+  exit 1
+fi
+set -a
+# shellcheck source=/dev/null
+source "$SETTINGS"
+set +a
+
+: "${AGE_RECIPIENT:?AGE_RECIPIENT is not set in $SETTINGS}"
+: "${BACKUP_REMOTE:?BACKUP_REMOTE is not set in $SETTINGS}"
+CONFIG_DIR="${CONFIG_DIR:-/srv/sweto/config}"
+BACKUP_ROOT="${BACKUP_ROOT:-/var/backups/sweto}"
+KEEP_LOCAL_DAYS="${KEEP_LOCAL_DAYS:-14}"
+KEEP_REMOTE_DAYS="${KEEP_REMOTE_DAYS:-30}"
+
+DATABASE="sweto_${ENVIRONMENT}"
+ENV_FILE="${CONFIG_DIR}/${ENVIRONMENT}.env"
+LOCAL_DIR="${BACKUP_ROOT}/${ENVIRONMENT}"
+STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
+NAME="${DATABASE}-${STAMP}.tar.age"
+
+mkdir -p "$LOCAL_DIR"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+# 1. Dump as the postgres OS user (peer login: no password to store).
+runuser -u postgres -- pg_dump --format=custom --no-owner --no-acl \
+  --dbname="$DATABASE" >"$WORK/$DATABASE.dump"
+# A dump pg_restore can't list is no backup at all.
+pg_restore --list "$WORK/$DATABASE.dump" >/dev/null
+
+# 2. The settings that go with it.
+cp "$ENV_FILE" "$WORK/${ENVIRONMENT}.env"
+
+# 3. Encrypt both into one file. Nothing unencrypted is ever kept.
+tar -C "$WORK" -cf - "$DATABASE.dump" "${ENVIRONMENT}.env" |
+  age --recipient "$AGE_RECIPIENT" >"$LOCAL_DIR/$NAME.partial"
+mv "$LOCAL_DIR/$NAME.partial" "$LOCAL_DIR/$NAME"
+
+# 4. Off the server.
+rclone copyto --s3-no-check-bucket "$LOCAL_DIR/$NAME" \
+  "${BACKUP_REMOTE%/}/${ENVIRONMENT}/$NAME"
+
+# 5. Keep two weeks here and a month in the bucket.
+find "$LOCAL_DIR" -name "${DATABASE}-*.tar.age" -mtime "+$KEEP_LOCAL_DAYS" -delete
+rclone delete --min-age "${KEEP_REMOTE_DAYS}d" \
+  "${BACKUP_REMOTE%/}/${ENVIRONMENT}/"
+
+SIZE="$(du -h "$LOCAL_DIR/$NAME" | cut -f1)"
+echo "Backup OK: $NAME ($SIZE), copied to ${BACKUP_REMOTE%/}/${ENVIRONMENT}/"
