@@ -209,6 +209,44 @@ class FakeMembers implements MembersRepository {
     );
   }
 
+  /// Keyed by "year-month"; a missing month throws.
+  final finance = <String, FinanceSummary>{};
+  final financePayments = <FinanceTransaction>[];
+  final financeCalls = <(DateTime?, bool?, int)>[];
+  Object? financeError;
+
+  @override
+  Future<FinanceSummary> getFinance(String gymId, {DateTime? month}) async {
+    if (financeError != null) throw financeError!;
+    final key = month == null
+        ? finance.keys.last
+        : '${month.year}-${month.month}';
+    return finance[key]!;
+  }
+
+  @override
+  Future<FinanceTransactionPage> getFinanceTransactions(
+    String gymId, {
+    DateTime? month,
+    bool? mpesa,
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    financeCalls.add((month, mpesa, offset));
+    if (financeError != null) throw financeError!;
+    // No month means this month: the latest one set up.
+    final wanted =
+        month ?? (finance.isEmpty ? null : finance[finance.keys.last]!.month);
+    final found = financePayments
+        .where((t) => wanted == null || t.at.month == wanted.month)
+        .where((t) => mpesa == null || t.isMpesa == mpesa)
+        .toList();
+    return FinanceTransactionPage(
+      transactions: found.skip(offset).take(limit).toList(),
+      total: found.length,
+    );
+  }
+
   DashboardSummary? dashboard;
   Object? dashboardError;
   int dashboardLoads = 0;

@@ -239,6 +239,101 @@ class DioMembersRepository implements MembersRepository {
   }
 
   @override
+  Future<FinanceSummary> getFinance(String gymId, {DateTime? month}) async {
+    final r = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.gymFinance(gymId),
+      queryParameters: {if (month != null) 'month': _yearMonth(month)},
+    );
+    final d = _data(r.data);
+    final methods = {
+      for (final item in (d['by_method'] as List? ?? const []).map(_map))
+        item['method']: item,
+    };
+    double amountOf(String method) => _number(methods[method]?['amount']);
+    int countOf(String method) =>
+        (methods[method]?['count'] as num?)?.toInt() ?? 0;
+    return FinanceSummary(
+      currency: d['currency'] as String? ?? 'KES',
+      month: _date(d['month']) ?? DateTime.now(),
+      through: _date(d['through']) ?? DateTime.now(),
+      isCurrentMonth: d['is_current_month'] == true,
+      total: _number(d['total']),
+      paymentsCount: (d['payments_count'] as num?)?.toInt() ?? 0,
+      previousMonthTotal: _number(d['previous_month_total']),
+      changePercent: (d['change_percent'] as num?)?.toDouble(),
+      cashAmount: amountOf('cash'),
+      cashCount: countOf('cash'),
+      mpesaAmount: amountOf('mpesa'),
+      mpesaCount: countOf('mpesa'),
+      byPlan: (d['by_plan'] as List? ?? const [])
+          .map(_map)
+          .map(
+            (p) => PlanRevenue(
+              planName: p['plan_name'] as String? ?? '',
+              amount: _number(p['amount']),
+              count: (p['count'] as num?)?.toInt() ?? 0,
+            ),
+          )
+          .toList(),
+      trend: (d['trend'] as List? ?? const [])
+          .map(_map)
+          .map(
+            (m) => MonthRevenue(
+              month: _date(m['month']) ?? DateTime.now(),
+              amount: _number(m['amount']),
+            ),
+          )
+          .toList(),
+      failedMpesaCount: (d['failed_mpesa_count'] as num?)?.toInt() ?? 0,
+      pendingMpesaCount: (d['pending_mpesa_count'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  @override
+  Future<FinanceTransactionPage> getFinanceTransactions(
+    String gymId, {
+    DateTime? month,
+    bool? mpesa,
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    final r = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.gymFinanceTransactions(gymId),
+      queryParameters: {
+        if (month != null) 'month': _yearMonth(month),
+        if (mpesa != null) 'method': mpesa ? 'mpesa' : 'cash',
+        'limit': limit,
+        'offset': offset,
+      },
+    );
+    final d = _data(r.data);
+    return FinanceTransactionPage(
+      total: (d['total'] as num?)?.toInt() ?? 0,
+      transactions: (d['transactions'] as List? ?? const [])
+          .map(_map)
+          .map(
+            (t) => FinanceTransaction(
+              paymentId: _string(t, 'payment_id'),
+              memberId: _string(t, 'member_id'),
+              memberName: t['member_name'] as String? ?? '',
+              planName: t['plan_name'] as String? ?? '',
+              amount: _number(t['amount']),
+              currency: t['currency'] as String? ?? 'KES',
+              isMpesa: t['method'] == 'mpesa',
+              state: PaymentState.fromApi(t['status'] as String?),
+              at: DateTime.tryParse('${t['at']}')?.toLocal() ?? DateTime.now(),
+              receipt: t['receipt'] as String?,
+              recordedByName: t['recorded_by_name'] as String?,
+            ),
+          )
+          .toList(),
+    );
+  }
+
+  static String _yearMonth(DateTime month) =>
+      '${month.year}-${month.month.toString().padLeft(2, '0')}';
+
+  @override
   Future<MpesaTill> getMpesaTill(String gymId) async {
     final r = await _dio.get<Map<String, dynamic>>(
       ApiEndpoints.gymMpesaAccount(gymId),

@@ -42,6 +42,18 @@ abstract interface class MembersRepository {
   Future<CheckInOutcome> checkIn(String gymId, String code);
   Future<CheckInDay> checkInsToday(String gymId);
   Future<DashboardSummary> getDashboard(String gymId);
+
+  /// [month] is any day in the month; null for this month.
+  Future<FinanceSummary> getFinance(String gymId, {DateTime? month});
+
+  /// [mpesa] true for M-Pesa only, false for cash only, null for both.
+  Future<FinanceTransactionPage> getFinanceTransactions(
+    String gymId, {
+    DateTime? month,
+    bool? mpesa,
+    int limit = 30,
+    int offset = 0,
+  });
   Future<MpesaTill> getMpesaTill(String gymId);
   Future<MpesaTill> saveMpesaTill(
     String gymId, {

@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sweto_app/core/router/app_routes.dart';
+import 'package:sweto_app/features/gym_owner/presentation/home/finance_tab.dart';
 import 'package:sweto_app/features/gym_owner/presentation/home/owner_shell.dart';
 import 'package:sweto_app/features/members/domain/member_entities.dart';
 import 'package:sweto_app/features/members/presentation/members_providers.dart';
@@ -141,8 +142,26 @@ void main() {
     expect(find.text('check-in screen'), findsOneWidget);
   });
 
-  testWidgets('tabs switch between Home, Members and More', (tester) async {
-    final repo = FakeMembers()..dashboard = _summary();
+  testWidgets('tabs switch between Home, Members, Finance and More', (
+    tester,
+  ) async {
+    final repo = FakeMembers()
+      ..dashboard = _summary()
+      ..finance['2026-11'] = FinanceSummary(
+        currency: 'KES',
+        month: DateTime(2026, 11),
+        through: DateTime(2026, 11, 14),
+        isCurrentMonth: true,
+        total: 1500,
+        paymentsCount: 1,
+        previousMonthTotal: 0,
+        cashAmount: 1500,
+        cashCount: 1,
+        mpesaAmount: 0,
+        mpesaCount: 0,
+        byPlan: const [],
+        trend: const [],
+      );
     final logouts = await _pump(tester, repo);
     final loadsAtStart = repo.dashboardLoads;
 
@@ -150,6 +169,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(MembersScreen), findsOneWidget);
     expect(find.byKey(const Key('add-member-button')), findsOneWidget);
+
+    await tester.tap(find.text('Finance'));
+    await tester.pumpAndSettle();
+    expect(find.byType(FinanceTab), findsOneWidget);
+    expect(find.text('KES 1,500'), findsWidgets);
 
     await tester.tap(find.text('More'));
     await tester.pumpAndSettle();
