@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +14,7 @@ import 'package:sweto_app/features/members/domain/member_entities.dart';
 import 'package:sweto_app/features/members/domain/members_repository.dart';
 import 'package:sweto_app/features/members/presentation/add_member_screen.dart';
 import 'package:sweto_app/features/members/presentation/member_detail_screen.dart';
+import 'package:sweto_app/features/members/presentation/check_in_code_share.dart';
 import 'package:sweto_app/features/members/presentation/members_providers.dart';
 import 'package:sweto_app/features/members/presentation/members_screen.dart';
 
@@ -42,6 +45,9 @@ DioException fakeApiError(String message) => DioException(
 
 class FakeMembers implements MembersRepository {
   final members = <GymMember>[];
+
+  /// Check-in QRs handed to the share sheet: image, file name, text.
+  final shares = <(Uint8List, String, String)>[];
   final listCalls = <(MemberStanding?, String?)>[];
   final added = <(String, String)>[];
   final consents = <bool>[];
@@ -385,6 +391,10 @@ Future<void> _pump(
       overrides: [
         membersRepositoryProvider.overrideWithValue(members),
         gymOwnerRepositoryProvider.overrideWithValue(FakePricing()),
+        checkInCodeSharerProvider.overrideWithValue(
+          ({required png, required fileName, required text, origin}) async =>
+              members.shares.add((png, fileName, text)),
+        ),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),
@@ -766,6 +776,32 @@ void main() {
       await tester.pumpAndSettle();
       expect(repo.issuedCodes, ['1']);
     });
+  });
+
+  testWidgets('the new code can be shared as a QR image with the code', (
+    tester,
+  ) async {
+    final repo = FakeMembers()..members.add(fakeMember('1', 'Achieng Otieno'));
+    await _pump(tester, repo, location: '/gyms/$_gymId/members/1');
+    await tester.tap(find.byKey(const Key('issue-check-in-code')));
+    await tester.pumpAndSettle();
+
+    // Drawing the PNG needs the real engine, outside the fake clock.
+    await tester.runAsync(() async {
+      await tester.tap(find.byKey(const Key('check-in-share')));
+      for (var i = 0; i < 50 && repo.shares.isEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 20));
+        await tester.pump();
+      }
+    });
+    await tester.pumpAndSettle();
+
+    final (png, fileName, text) = repo.shares.single;
+    // A PNG file starts with these eight bytes.
+    expect(png.sublist(0, 8), [137, 80, 78, 71, 13, 10, 26, 10]);
+    expect(fileName, 'achieng-otieno-check-in.png');
+    expect(text, contains('7KQ2-M9XD'));
+    expect(find.byKey(const Key('check-in-qr')), findsOneWidget);
   });
 
   group('member SMS', () {
