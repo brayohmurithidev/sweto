@@ -18,11 +18,15 @@ class MemberDetailScreen extends ConsumerStatefulWidget {
   const MemberDetailScreen({
     required this.gymId,
     required this.memberId,
+    this.today,
     super.key,
   });
 
   final String gymId;
   final String memberId;
+
+  /// Overrides "today" in tests.
+  final DateTime? today;
 
   @override
   ConsumerState<MemberDetailScreen> createState() => _MemberDetailState();
@@ -58,6 +62,7 @@ class _MemberDetailState extends ConsumerState<MemberDetailScreen> {
       context,
       gymId: widget.gymId,
       member: member,
+      today: widget.today,
     );
     if (updated == null || !mounted) return;
     setState(() => _detail = updated);

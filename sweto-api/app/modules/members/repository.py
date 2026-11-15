@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from datetime import date, timedelta
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Select, func, or_, select
+from sqlalchemy import ColumnElement, Select, and_, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -31,6 +31,22 @@ def paid_until_column() -> ColumnElement[date]:
     )
 
 
+def current_start_column(today: date) -> ColumnElement[date]:
+    """First day of the outer member's period covering ``today``, or of the
+    next paid one when it hasn't started yet (pay Friday, start Monday)."""
+
+    return (
+        select(func.min(GymMembership.starts_on))
+        .where(
+            GymMembership.member_id == GymMember.id,
+            GymMembership.status == GymMembershipStatus.ACTIVE,
+            GymMembership.ends_on >= today,
+        )
+        .correlate(GymMember)
+        .scalar_subquery()
+    )
+
+
 def _search_condition(search: str) -> ColumnElement[bool]:
     term = search.strip()
     conditions: list[ColumnElement[bool]] = [GymMember.full_name.ilike(f"%{term}%")]
@@ -43,13 +59,20 @@ def _search_condition(search: str) -> ColumnElement[bool]:
 
 
 def _standing_condition(
-    paid_until: ColumnElement[date], standing: MemberStanding, today: date
+    paid_until: ColumnElement[date],
+    starts_on: ColumnElement[date],
+    standing: MemberStanding,
+    today: date,
 ) -> ColumnElement[bool]:
     last_expiring_day = today + timedelta(days=EXPIRING_WITHIN_DAYS - 1)
     if standing == MemberStanding.ACTIVE:
+        # Paid through today or later, including members starting soon: the
+        # list's Active tab is everyone who has paid.
         return paid_until >= today
     if standing == MemberStanding.EXPIRING:
-        return paid_until.between(today, last_expiring_day)
+        return and_(paid_until.between(today, last_expiring_day), starts_on <= today)
+    if standing == MemberStanding.UPCOMING:
+        return starts_on > today
     if standing == MemberStanding.EXPIRED:
         return paid_until < today
     return paid_until.is_(None)
@@ -98,6 +121,18 @@ class GymMemberRepository:
         result = await self.session.execute(statement.limit(1))
         return result.first() is not None
 
+    async def current_start(self, member_id: UUID, today: date) -> date | None:
+        """First day of the period covering ``today``, or of the next one."""
+
+        start: date | None = await self.session.scalar(
+            select(func.min(GymMembership.starts_on)).where(
+                GymMembership.member_id == member_id,
+                GymMembership.status == GymMembershipStatus.ACTIVE,
+                GymMembership.ends_on >= today,
+            )
+        )
+        return start
+
     async def paid_until(self, member_id: UUID) -> date | None:
         statement = select(func.max(GymMembership.ends_on)).where(
             GymMembership.member_id == member_id,
@@ -116,15 +151,18 @@ class GymMemberRepository:
         standing: MemberStanding | None,
         limit: int,
         offset: int,
-    ) -> tuple[Sequence[tuple[GymMember, date | None]], int]:
+    ) -> tuple[Sequence[tuple[GymMember, date | None, date | None]], int]:
         paid_until = paid_until_column()
-        filtered: Select[tuple[GymMember, date]] = select(
-            GymMember, paid_until.label("paid_until")
+        starts_on = current_start_column(today)
+        filtered: Select[tuple[GymMember, date, date]] = select(
+            GymMember, paid_until.label("paid_until"), starts_on.label("starts_on")
         ).where(GymMember.gym_id == gym_id, GymMember.status == status)
         if search and search.strip():
             filtered = filtered.where(_search_condition(search))
         if standing is not None:
-            filtered = filtered.where(_standing_condition(paid_until, standing, today))
+            filtered = filtered.where(
+                _standing_condition(paid_until, starts_on, standing, today)
+            )
 
         total = await self.session.scalar(
             select(func.count()).select_from(filtered.subquery())
@@ -134,7 +172,7 @@ class GymMemberRepository:
             .limit(limit)
             .offset(offset)
         )
-        rows = [(member, until) for member, until in page.tuples().all()]
+        rows = [(member, until, start) for member, until, start in page.tuples().all()]
         return rows, total or 0
 
 

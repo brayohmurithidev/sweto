@@ -27,7 +27,11 @@ from app.modules.members.exceptions import (
 )
 from app.modules.members.models import GymMember, GymMembership, Payment
 from app.modules.members.notifier import MemberNotifier
-from app.modules.members.periods import EXPIRING_WITHIN_DAYS, period_end
+from app.modules.members.periods import (
+    EXPIRING_WITHIN_DAYS,
+    FUTURE_START_LIMIT_DAYS,
+    period_end,
+)
 from app.modules.members.repository import GymMemberRepository, MembershipPlanLookup
 from app.modules.members.schemas import (
     CreateGymMemberRequest,
@@ -47,11 +51,18 @@ MEMBER_MANAGERS = frozenset({GymStaffRole.OWNER, GymStaffRole.MANAGER})
 BACKDATE_LIMIT_DAYS = 90
 
 
-def standing_for(paid_until: date | None, today: date) -> MemberStanding:
+def standing_for(
+    paid_until: date | None, today: date, starts_on: date | None = None
+) -> MemberStanding:
+    """``starts_on`` is the first day of the period covering today, or of the
+    next one; later than today means paid but not started yet."""
+
     if paid_until is None:
         return MemberStanding.NO_MEMBERSHIP
     if paid_until < today:
         return MemberStanding.EXPIRED
+    if starts_on is not None and starts_on > today:
+        return MemberStanding.UPCOMING
     if paid_until < today + timedelta(days=EXPIRING_WITHIN_DAYS):
         return MemberStanding.EXPIRING
     return MemberStanding.ACTIVE
@@ -100,7 +111,9 @@ class GymMemberService:
             offset=offset,
         )
         return GymMemberListData(
-            members=[self._member_data(m, until, today) for m, until in rows],
+            members=[
+                self._member_data(m, until, today, start) for m, until, start in rows
+            ],
             total=total,
             limit=limit,
             offset=offset,
@@ -264,6 +277,16 @@ class GymMemberService:
 
         if self.notifier is None or not member.can_receive_sms:
             return None
+        # Mention the start date only when the member isn't covered today
+        # (pay Friday, start Monday), not for a renewal queued after the
+        # current period.
+        today = self._today(gym)
+        current_start = await self.members.current_start(member.id, today)
+        starts_on = (
+            current_start
+            if current_start is not None and current_start > today
+            else None
+        )
         if not await self.notifier.has_welcome(member.id):
             # Only a hash of any earlier code exists, so texting a code means
             # issuing a new one; the old one stops working.
@@ -275,7 +298,11 @@ class GymMemberService:
                 await self.session.rollback()
                 return None
             return await self.notifier.welcome(
-                gym=gym, member=member, membership=membership, code=display_code(code)
+                gym=gym,
+                member=member,
+                membership=membership,
+                code=display_code(code),
+                starts_on=starts_on,
             )
         paid_until = await self.members.paid_until(member.id)
         return await self.notifier.payment_receipt(
@@ -283,6 +310,7 @@ class GymMemberService:
             member=member,
             membership=membership,
             paid_until=paid_until or membership.ends_on,
+            starts_on=starts_on,
         )
 
     @staticmethod
@@ -299,9 +327,9 @@ class GymMemberService:
                 "This member already has a current membership. Leave the start "
                 "date empty and the new period starts when the current one ends."
             )
-        if requested > today:
+        if requested > today + timedelta(days=FUTURE_START_LIMIT_DAYS):
             raise InvalidMembershipPaymentError(
-                "The start date can't be in the future."
+                f"The start date can be at most {FUTURE_START_LIMIT_DAYS} days ahead."
             )
         if requested < today - timedelta(days=BACKDATE_LIMIT_DAYS):
             raise InvalidMembershipPaymentError(
@@ -338,21 +366,25 @@ class GymMemberService:
 
     async def _summary(self, gym: Gym, member: GymMember) -> GymMemberData:
         await self.session.refresh(member)
+        today = self._today(gym)
         paid_until = await self.members.paid_until(member.id)
-        return self._member_data(member, paid_until, self._today(gym))
+        starts_on = await self.members.current_start(member.id, today)
+        return self._member_data(member, paid_until, today, starts_on)
 
     async def _detail(self, gym: Gym, member_id: UUID) -> GymMemberDetailData:
         member = await self.members.get_with_history(gym_id=gym.id, member_id=member_id)
         if member is None:
             raise GymMemberNotFoundError("This member was not found in your gym.")
         today = self._today(gym)
-        paid = [
-            m.ends_on
-            for m in member.memberships
-            if m.status == GymMembershipStatus.ACTIVE
-        ]
+        paid = [m for m in member.memberships if m.status == GymMembershipStatus.ACTIVE]
+        current_or_next = [m.starts_on for m in paid if m.ends_on >= today]
         return GymMemberDetailData(
-            member=self._member_data(member, max(paid, default=None), today),
+            member=self._member_data(
+                member,
+                max((m.ends_on for m in paid), default=None),
+                today,
+                min(current_or_next, default=None),
+            ),
             memberships=[self._membership_data(m, today) for m in member.memberships],
         )
 
@@ -384,15 +416,19 @@ class GymMemberService:
 
     @staticmethod
     def _member_data(
-        member: GymMember, paid_until: date | None, today: date
+        member: GymMember,
+        paid_until: date | None,
+        today: date,
+        starts_on: date | None = None,
     ) -> GymMemberData:
         return GymMemberData(
             id=member.id,
             full_name=member.full_name,
             phone_number=member.phone_number,
             status=member.status,
-            standing=standing_for(paid_until, today),
+            standing=standing_for(paid_until, today, starts_on),
             paid_until=paid_until,
+            starts_on=starts_on,
             has_check_in_code=member.check_in_code_hash is not None,
             sms_enabled=member.can_receive_sms,
             sms_consent_recorded_at=member.sms_consent_recorded_at,

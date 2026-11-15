@@ -3,7 +3,10 @@ enum MemberStanding {
   active('active'),
   expiring('expiring'),
   expired('expired'),
-  noMembership('no_membership');
+  noMembership('no_membership'),
+
+  /// Paid, but the period starts on a later day (pay Friday, start Monday).
+  upcoming('upcoming');
 
   const MemberStanding(this.apiValue);
   final String apiValue;
@@ -28,6 +31,7 @@ class GymMember {
     required this.status,
     required this.standing,
     this.paidUntil,
+    this.startsOn,
     this.hasCheckInCode = false,
     this.smsEnabled = false,
     this.smsOptedOutAt,
@@ -41,6 +45,10 @@ class GymMember {
 
   /// Last day covered by a paid membership, in the gym's local calendar.
   final DateTime? paidUntil;
+
+  /// First day of the period covering today, or of the next one when it
+  /// hasn't started yet ([MemberStanding.upcoming]).
+  final DateTime? startsOn;
 
   /// Whether a check-in code has been issued (the code itself is never kept).
   final bool hasCheckInCode;

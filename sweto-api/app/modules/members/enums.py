@@ -28,6 +28,8 @@ class MemberStanding(StrEnum):
     EXPIRING = "expiring"
     EXPIRED = "expired"
     NO_MEMBERSHIP = "no_membership"
+    # Paid, but the period starts on a later day (pay Friday, start Monday).
+    UPCOMING = "upcoming"
 
 
 class CheckInResult(StrEnum):

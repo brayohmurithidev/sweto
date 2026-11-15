@@ -384,6 +384,7 @@ class DioMembersRepository implements MembersRepository {
     status: MemberStatus.fromApi(d['status'] as String?),
     standing: MemberStanding.fromApi(d['standing'] as String?),
     paidUntil: _date(d['paid_until']),
+    startsOn: _date(d['starts_on']),
     hasCheckInCode: d['has_check_in_code'] == true,
     smsEnabled: d['sms_enabled'] == true,
     smsOptedOutAt: DateTime.tryParse('${d['sms_opted_out_at']}')?.toLocal(),

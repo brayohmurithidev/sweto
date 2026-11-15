@@ -11,14 +11,11 @@ import 'package:sweto_app/features/gym_owner/domain/gym_owner_entities.dart';
 import 'package:sweto_app/features/gym_owner/presentation/onboarding_coordinator.dart';
 import 'package:sweto_app/features/members/domain/member_entities.dart';
 import 'package:sweto_app/features/members/presentation/cash_payment_form.dart';
-import 'package:sweto_app/features/members/presentation/member_formatting.dart';
 import 'package:sweto_app/features/members/presentation/members_providers.dart';
+import 'package:sweto_app/features/members/presentation/start_date_tile.dart';
 import 'package:sweto_app/shared/widgets/app_primary_button.dart';
 import 'package:sweto_app/shared/widgets/phone_number_field.dart';
 import 'package:sweto_app/shared/widgets/sweto_snackbar.dart';
-
-/// How far back a first payment can start (matches the API).
-const backdateLimitDays = 90;
 
 class AddMemberScreen extends ConsumerStatefulWidget {
   const AddMemberScreen({required this.gymId, this.today, super.key});
@@ -99,17 +96,6 @@ class _AddMemberScreenState extends ConsumerState<AddMemberScreen> {
         });
       }
     }
-  }
-
-  Future<void> _pickStartDate() async {
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _startedOn ?? _today,
-      firstDate: _today.subtract(const Duration(days: backdateLimitDays)),
-      lastDate: _today,
-      helpText: 'When did this membership start?',
-    );
-    if (picked != null) setState(() => _startedOn = picked);
   }
 
   bool _validate() {
@@ -272,21 +258,11 @@ class _AddMemberScreenState extends ConsumerState<AddMemberScreen> {
                   }),
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                ListTile(
+                StartDateTile(
                   key: const Key('member-start-date'),
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.event, color: AppColors.primary),
-                  title: Text(
-                    _startedOn == null || _startedOn == _today
-                        ? 'Starts today'
-                        : 'Started ${formatDay(_startedOn!)}',
-                  ),
-                  subtitle: Text(
-                    'Paid earlier? Pick the start date (up to '
-                    '$backdateLimitDays days back).',
-                    style: AppTextStyles.bodySmall,
-                  ),
-                  onTap: _pickStartDate,
+                  today: _today,
+                  value: _startedOn,
+                  onChanged: (day) => setState(() => _startedOn = day),
                 ),
               ],
             ],
