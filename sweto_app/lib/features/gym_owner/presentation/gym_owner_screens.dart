@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:sweto_app/core/maps/maps_availability.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sweto_app/core/network/api_exception.dart';
 import 'package:sweto_app/core/router/app_routes.dart';
@@ -2455,7 +2456,9 @@ class _GymLocationScreenState extends ConsumerState<GymLocationScreen> {
         setState(
           () => _locationError = error is _LocationMessage
               ? error.message
-              : 'We couldn’t find your location. Drag the map to your gym instead.',
+              : (ref.read(mapsAvailableProvider).value ?? false)
+              ? 'We couldn’t find your location. Drag the map to your gym instead.'
+              : 'We couldn’t find your location. Type the address below instead.',
         );
       }
     } finally {
@@ -2618,39 +2621,42 @@ class _GymLocationScreenState extends ConsumerState<GymLocationScreen> {
                 const Text('Help members find your gym easily.'),
               ],
               const SizedBox(height: AppSpacing.sm),
-              SizedBox(
-                height: 270,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                  child: GoogleMap(
-                    initialCameraPosition: CameraPosition(
-                      target: LatLng(_latitude, _longitude),
-                      zoom: 14,
-                    ),
-                    myLocationButtonEnabled: false,
-                    zoomControlsEnabled: false,
-                    markers: {
-                      Marker(
-                        markerId: const MarkerId('gym-location'),
-                        position: LatLng(_latitude, _longitude),
-                        draggable: true,
-                        onDragEnd: (value) =>
-                            _selectPosition(value.latitude, value.longitude),
+              if (ref.watch(mapsAvailableProvider).value ?? false) ...[
+                SizedBox(
+                  height: 270,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    child: GoogleMap(
+                      initialCameraPosition: CameraPosition(
+                        target: LatLng(_latitude, _longitude),
+                        zoom: 14,
                       ),
-                    },
-                    onMapCreated: (controller) => _mapController = controller,
-                    onTap: (value) =>
-                        _selectPosition(value.latitude, value.longitude),
+                      myLocationButtonEnabled: false,
+                      zoomControlsEnabled: false,
+                      markers: {
+                        Marker(
+                          markerId: const MarkerId('gym-location'),
+                          position: LatLng(_latitude, _longitude),
+                          draggable: true,
+                          onDragEnd: (value) =>
+                              _selectPosition(value.latitude, value.longitude),
+                        ),
+                      },
+                      onMapCreated: (controller) => _mapController = controller,
+                      onTap: (value) =>
+                          _selectPosition(value.latitude, value.longitude),
+                    ),
                   ),
                 ),
-              ),
-              const Padding(
-                padding: EdgeInsets.only(top: AppSpacing.xs),
-                child: Text(
-                  'Drag the map to position your gym',
-                  style: AppTextStyles.caption,
+                const Padding(
+                  padding: EdgeInsets.only(top: AppSpacing.xs),
+                  child: Text(
+                    'Drag the map to position your gym',
+                    style: AppTextStyles.caption,
+                  ),
                 ),
-              ),
+              ] else
+                const _MapUnavailable(),
               const SizedBox(height: AppSpacing.xs),
               OutlinedButton.icon(
                 onPressed: _locating ? null : _useCurrentLocation,
@@ -2756,6 +2762,36 @@ class _GymLocationScreenState extends ConsumerState<GymLocationScreen> {
         fillColor: AppColors.surface,
         isDense: true,
       ),
+    ),
+  );
+}
+
+/// Shown instead of the map in a build without a Google Maps key.
+class _MapUnavailable extends StatelessWidget {
+  const _MapUnavailable();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    key: const Key('location-map-unavailable'),
+    width: double.infinity,
+    padding: const EdgeInsets.all(AppSpacing.md),
+    decoration: BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      border: Border.all(color: AppColors.border),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.map_outlined, color: AppColors.textSecondary),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: Text(
+            'The map isn’t available right now. Use your current location '
+            'while at the gym, or type the address below.',
+            style: AppTextStyles.bodySmall,
+          ),
+        ),
+      ],
     ),
   );
 }
