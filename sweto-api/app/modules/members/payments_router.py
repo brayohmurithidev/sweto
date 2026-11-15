@@ -11,9 +11,15 @@ from app.database.session import get_db_session
 from app.integrations.mpesa.base import MpesaGateway, StkResult
 from app.integrations.mpesa.dependencies import get_mpesa_gateway
 from app.modules.auth.dependencies import CurrentUser
+from app.modules.members.mpesa_accounts import MpesaAccounts
 from app.modules.members.mpesa_service import MpesaPaymentService
 from app.modules.members.router import MemberService
-from app.modules.members.schemas import MpesaPaymentData, RequestMpesaPaymentRequest
+from app.modules.members.schemas import (
+    MpesaAccountData,
+    MpesaPaymentData,
+    RequestMpesaPaymentRequest,
+    SaveMpesaAccountRequest,
+)
 from app.shared.clock import Clock, get_clock
 from app.shared.responses import APIResponse
 
@@ -132,3 +138,36 @@ def _parse_callback(body: dict[str, Any]) -> tuple[str, StkResult] | None:
         )
     except (KeyError, TypeError, ValueError, AttributeError):
         return None
+
+
+def get_mpesa_accounts(
+    settings: Annotated[Settings, Depends(get_settings)],
+    members: MemberService,
+) -> MpesaAccounts:
+    return MpesaAccounts(session=members.session, settings=settings, members=members)
+
+
+AccountsService = Annotated[MpesaAccounts, Depends(get_mpesa_accounts)]
+
+
+@router.get("/mpesa-account", response_model=APIResponse[MpesaAccountData])
+async def get_mpesa_account(
+    gym_id: UUID, current_user: CurrentUser, accounts: AccountsService
+) -> APIResponse[MpesaAccountData]:
+    """The gym's M-Pesa till (never the passkey)."""
+
+    data = await accounts.get(user_id=current_user.id, gym_id=gym_id)
+    return APIResponse(data=data)
+
+
+@router.put("/mpesa-account", response_model=APIResponse[MpesaAccountData])
+async def save_mpesa_account(
+    gym_id: UUID,
+    payload: SaveMpesaAccountRequest,
+    current_user: CurrentUser,
+    accounts: AccountsService,
+) -> APIResponse[MpesaAccountData]:
+    """Set where the gym's M-Pesa payments go. Owner only."""
+
+    data = await accounts.save(user_id=current_user.id, gym_id=gym_id, payload=payload)
+    return APIResponse(data=data)

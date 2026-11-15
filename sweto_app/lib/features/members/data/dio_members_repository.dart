@@ -238,6 +238,43 @@ class DioMembersRepository implements MembersRepository {
     );
   }
 
+  @override
+  Future<MpesaTill> getMpesaTill(String gymId) async {
+    final r = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.gymMpesaAccount(gymId),
+    );
+    return _till(_data(r.data));
+  }
+
+  @override
+  Future<MpesaTill> saveMpesaTill(
+    String gymId, {
+    required bool isTill,
+    required String shortcode,
+    String? tillNumber,
+    String? passkey,
+  }) async {
+    final r = await _dio.put<Map<String, dynamic>>(
+      ApiEndpoints.gymMpesaAccount(gymId),
+      data: {
+        'account_type': isTill ? 'till' : 'paybill',
+        'shortcode': shortcode,
+        if (isTill) 'till_number': tillNumber,
+        'passkey': ?passkey,
+      },
+    );
+    return _till(_data(r.data));
+  }
+
+  MpesaTill _till(Map<String, dynamic> d) => MpesaTill(
+    configured: d['configured'] == true,
+    mode: d['mode'] as String? ?? 'disabled',
+    isTill: d['account_type'] == 'till',
+    shortcode: d['shortcode'] as String?,
+    tillNumber: d['till_number'] as String?,
+    passkeySaved: d['passkey_saved'] == true,
+  );
+
   MemberDetail _detail(Map<String, dynamic> d) => MemberDetail(
     member: _member(_map(d['member'])),
     memberships: (d['memberships'] as List? ?? const [])

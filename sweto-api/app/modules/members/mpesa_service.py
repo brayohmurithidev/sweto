@@ -50,6 +50,7 @@ from app.modules.members.models import (
     Payment,
     PaymentTransaction,
 )
+from app.modules.members.mpesa_accounts import MpesaAccounts
 from app.modules.members.periods import period_end
 from app.modules.members.schemas import MpesaPaymentData, RequestMpesaPaymentRequest
 from app.modules.members.service import GymMemberService
@@ -114,6 +115,9 @@ class MpesaPaymentService:
             if payload.phone_number
             else member.phone_number
         )
+        account = await MpesaAccounts(
+            session=self.session, settings=self.settings, members=self.members
+        ).for_gym(gym.id)
         now = self.clock()
         await self._guard_pending(member.id)
 
@@ -161,6 +165,7 @@ class MpesaPaymentService:
         try:
             async with asyncio.timeout(self.settings.mpesa_timeout_seconds + 5):
                 accepted = await self.gateway.stk_push(
+                    account=account,
                     phone_number=phone,
                     amount=amount,
                     account_reference=gym.name.replace(" ", "")[:12] or "SWETO",

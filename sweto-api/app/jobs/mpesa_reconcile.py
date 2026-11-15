@@ -22,7 +22,9 @@ from app.core.config import Settings
 from app.integrations.mpesa.base import MpesaError, MpesaGateway, StkResult
 from app.integrations.sms.base import SMSProvider
 from app.modules.members.enums import PaymentTransactionStatus
+from app.modules.members.exceptions import MpesaNotConfiguredError
 from app.modules.members.models import PaymentTransaction
+from app.modules.members.mpesa_accounts import MpesaAccounts
 from app.modules.members.mpesa_service import MpesaPaymentService
 from app.modules.members.notifier import MemberNotifier
 from app.modules.members.service import GymMemberService
@@ -52,13 +54,14 @@ async def reconcile_pending(
                     PaymentTransaction.id,
                     PaymentTransaction.checkout_request_id,
                     PaymentTransaction.requested_at,
+                    PaymentTransaction.gym_id,
                 ).where(
                     PaymentTransaction.status == PaymentTransactionStatus.PENDING,
                     PaymentTransaction.requested_at < now - QUERY_AFTER,
                 )
             )
         ).all()
-    for transaction_id, checkout, requested_at in pending:
+    for transaction_id, checkout, requested_at, gym_id in pending:
         async with session_factory() as session:
             service = _service(session, gateway, sms, settings, clock)
             if checkout is None:
@@ -68,7 +71,16 @@ async def reconcile_pending(
                     outcomes["timed_out"] += 1
                 continue
             try:
-                result = await gateway.stk_query(checkout_request_id=checkout)
+                account = await MpesaAccounts(
+                    session=session, settings=settings, members=service.members
+                ).for_gym(gym_id)
+                result = await gateway.stk_query(
+                    account=account, checkout_request_id=checkout
+                )
+            except MpesaNotConfiguredError:
+                logger.warning("M-Pesa status query skipped: gym has no till")
+                outcomes["no_account"] += 1
+                continue
             except MpesaError as error:
                 logger.warning("M-Pesa status query failed: reason=%s", error.reason)
                 outcomes["query_failed"] += 1
