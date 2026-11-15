@@ -19,13 +19,31 @@ to the Android application ID and signing certificate before release.
 Create an ignored `ios/Flutter/GoogleMaps.local.xcconfig` containing:
 
 ```text
-GOOGLE_MAPS_API_KEY = your-ios-key
+GMS_API_KEY = your-ios-key
 ```
 
-Include that file from the Runner build configuration in Xcode, or pass
-`--dart-define`/an equivalent CI build setting that supplies the same
-`GOOGLE_MAPS_API_KEY` build variable. Restrict the key to the iOS bundle ID.
+`Debug.xcconfig` and `Release.xcconfig` include it when present, and
+`Info.plist` passes it to the app as `GMSApiKey`. Restrict the key to the iOS
+bundle ID.
 
 After adding the packages, run `flutter pub get`, then `cd ios && pod install`.
-Missing native pods or keys usually appear as a blank map or a plugin-channel
-error during startup. Configure separate restricted release keys later.
+
+## Without a key
+
+Google Maps for iOS aborts the whole app when a map is drawn without a key.
+The app therefore asks the native side first (method channel `sweto/maps`,
+`isConfigured`). Without a key, the Location step shows a short note in place
+of the map, and the address fields and "Use my current location" still work.
+A fresh checkout, CI or a new machine has no key until you add the files above.
+
+## Release builds checklist
+
+Before building for TestFlight, the App Store or Play:
+
+- `ios/Flutter/GoogleMaps.local.xcconfig` has `GMS_API_KEY` (iOS key,
+  restricted to the bundle ID `com.fazilabs.swetoApp`);
+- `android/local.properties` has `MAPS_API_KEY` (Android key, restricted to
+  `com.fazilabs.sweto_app` and the release signing certificate);
+- open the Location step once on the built app and see the map.
+
+Use separate keys for release builds, not the ones on developer machines.
