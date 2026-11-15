@@ -47,6 +47,9 @@ def gym(status: GymVerificationStatus = GymVerificationStatus.NOT_SUBMITTED) -> 
         id=uuid4(),
         name="FlexFit",
         slug=f"flexfit-{uuid4()}",
+        # Column defaults only apply on insert; set them like a stored row.
+        country_code="KE",
+        timezone="Africa/Nairobi",
         status=GymStatus.DRAFT,
         verification_status=status,
         onboarding_step=GymOnboardingStep.VERIFICATION,
