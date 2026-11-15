@@ -163,7 +163,11 @@ class DashboardService:
         added = (
             await self.session.execute(
                 select(GymMember)
-                .where(GymMember.gym_id == gym_id)
+                .where(
+                    GymMember.gym_id == gym_id,
+                    # An archived member (e.g. added by mistake) isn't news.
+                    GymMember.status == GymMemberStatus.ACTIVE,
+                )
                 .order_by(GymMember.created_at.desc())
                 .limit(RECENT_ITEMS)
             )

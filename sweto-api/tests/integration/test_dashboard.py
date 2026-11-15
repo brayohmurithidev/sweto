@@ -98,6 +98,23 @@ async def test_months_follow_the_gyms_midnight(
     assert revenue["daily"] == [{"date": "2026-11-01", "amount": "1500.00"}]
 
 
+async def test_archived_members_drop_out_of_new_member_activity(
+    api: IntegrationAPI, storage: FakeStorage
+) -> None:
+    owner = await sign_in_owner(api)
+    gym_id, _ = await gym_with_plans(owner, storage)
+    await add_member(owner, gym_id, "Stays", "0711000001")
+    mistake = await add_member(owner, gym_id, "Added By Mistake", "0711000002")
+    archived = await owner.call(
+        "POST", f"/gyms/{gym_id}/members/{mistake['id']}/archive"
+    )
+    assert archived.status_code == 200, archived.json()
+
+    activity = (await dashboard(owner, gym_id))["recent_activity"]
+
+    assert [item["member_name"] for item in activity] == ["Stays"]
+
+
 async def test_an_empty_gym_shows_zeros(
     api: IntegrationAPI, storage: FakeStorage
 ) -> None:
