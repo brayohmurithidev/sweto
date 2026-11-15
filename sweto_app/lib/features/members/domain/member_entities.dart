@@ -302,3 +302,26 @@ class DashboardSummary {
   final List<double> dailyRevenue;
   final List<ActivityItem> recentActivity;
 }
+
+/// The gym's own M-Pesa Pay Bill or Till. The passkey never comes back.
+class MpesaTill {
+  const MpesaTill({
+    required this.configured,
+    required this.mode,
+    this.isTill = false,
+    this.shortcode,
+    this.tillNumber,
+    this.passkeySaved = false,
+  });
+
+  final bool configured;
+
+  /// disabled, simulated, sandbox or production.
+  final String mode;
+  final bool isTill;
+  final String? shortcode;
+  final String? tillNumber;
+  final bool passkeySaved;
+
+  bool get isLive => mode == 'production';
+}

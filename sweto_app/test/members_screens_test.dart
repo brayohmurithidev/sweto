@@ -177,6 +177,38 @@ class FakeMembers implements MembersRepository {
   @override
   Future<CheckInDay> checkInsToday(String gymId) async => today;
 
+  MpesaTill till = const MpesaTill(configured: false, mode: 'simulated');
+  final tillSaves = <Map<String, Object?>>[];
+  Object? tillError;
+
+  @override
+  Future<MpesaTill> getMpesaTill(String gymId) async => till;
+
+  @override
+  Future<MpesaTill> saveMpesaTill(
+    String gymId, {
+    required bool isTill,
+    required String shortcode,
+    String? tillNumber,
+    String? passkey,
+  }) async {
+    if (tillError != null) throw tillError!;
+    tillSaves.add({
+      'isTill': isTill,
+      'shortcode': shortcode,
+      'tillNumber': tillNumber,
+      'passkey': passkey,
+    });
+    return till = MpesaTill(
+      configured: true,
+      mode: till.mode,
+      isTill: isTill,
+      shortcode: shortcode,
+      tillNumber: tillNumber,
+      passkeySaved: true,
+    );
+  }
+
   DashboardSummary? dashboard;
   Object? dashboardError;
   int dashboardLoads = 0;

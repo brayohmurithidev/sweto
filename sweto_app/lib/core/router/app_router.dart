@@ -17,6 +17,7 @@ import 'package:sweto_app/features/members/presentation/add_member_screen.dart';
 import 'package:sweto_app/features/members/presentation/check_in_screen.dart';
 import 'package:sweto_app/features/members/presentation/member_detail_screen.dart';
 import 'package:sweto_app/features/members/presentation/members_screen.dart';
+import 'package:sweto_app/features/members/presentation/mpesa_till_screen.dart';
 
 CustomTransitionPage<void> _onboardingPage(GoRouterState state, Widget child) =>
     CustomTransitionPage<void>(
@@ -145,6 +146,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         name: AppRoutes.homeName,
         pageBuilder: (context, state) =>
             _onboardingPage(state, const GymOwnerDashboardScreen()),
+      ),
+      GoRoute(
+        path: AppRoutes.mpesaTillPath,
+        name: AppRoutes.mpesaTillName,
+        builder: (context, state) =>
+            MpesaTillScreen(gymId: state.pathParameters['gymId']!),
       ),
       GoRoute(
         path: AppRoutes.checkInPath,

@@ -50,6 +50,9 @@ class AppRoutes {
   static const checkInName = 'check-in';
   static const checkInPath = '/gyms/:gymId/check-in';
 
+  static const mpesaTillName = 'mpesa-till';
+  static const mpesaTillPath = '/gyms/:gymId/mpesa-till';
+
   static const healthName = 'health';
   static const healthPath = '/health';
 }

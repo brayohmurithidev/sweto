@@ -42,4 +42,12 @@ abstract interface class MembersRepository {
   Future<CheckInOutcome> checkIn(String gymId, String code);
   Future<CheckInDay> checkInsToday(String gymId);
   Future<DashboardSummary> getDashboard(String gymId);
+  Future<MpesaTill> getMpesaTill(String gymId);
+  Future<MpesaTill> saveMpesaTill(
+    String gymId, {
+    required bool isTill,
+    required String shortcode,
+    String? tillNumber,
+    String? passkey,
+  });
 }

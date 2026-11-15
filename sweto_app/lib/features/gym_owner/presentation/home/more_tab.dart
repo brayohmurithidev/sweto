@@ -43,6 +43,17 @@ class MoreTab extends StatelessWidget {
       ),
       const SizedBox(height: AppSpacing.sm),
       _tile(
+        key: const Key('more-mpesa-till'),
+        icon: Icons.account_balance_outlined,
+        title: 'M-Pesa till',
+        subtitle: 'Where members\' M-Pesa payments go',
+        onTap: () => context.pushNamed(
+          AppRoutes.mpesaTillName,
+          pathParameters: {'gymId': gymId},
+        ),
+      ),
+      const SizedBox(height: AppSpacing.sm),
+      _tile(
         key: const Key('more-logout'),
         icon: Icons.logout_rounded,
         title: 'Log out',
