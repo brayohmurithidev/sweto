@@ -310,7 +310,8 @@ class MpesaPaymentService:
         ).rstrip("/")
         token = self.settings.mpesa_callback_token
         secret = token.get_secret_value() if token else "local"
-        return f"{base}{self.settings.api_v1_prefix}/payments/mpesa/callback/{secret}"
+        # No "mpesa" in the path: Daraja won't call such URLs back.
+        return f"{base}{self.settings.api_v1_prefix}/payments/stk/callback/{secret}"
 
     async def _data(
         self, payment: Payment, sms: MemberMessageStatus | None

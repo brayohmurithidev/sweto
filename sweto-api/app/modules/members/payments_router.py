@@ -26,7 +26,13 @@ from app.shared.responses import APIResponse
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/gyms/{gym_id}", tags=["Payments"])
-callback_router = APIRouter(prefix="/payments/mpesa", tags=["Payments"])
+callback_router = APIRouter(prefix="/payments", tags=["Payments"])
+
+# Safaricom's Daraja won't call back to URLs containing words like "mpesa"
+# or "safaricom", so new prompts use the neutral STK path. The old path
+# stays so prompts sent before the change can still settle.
+CALLBACK_PATH = "/stk/callback/{token}"
+LEGACY_CALLBACK_PATH = "/mpesa/callback/{token}"
 
 
 def get_mpesa_service(
@@ -90,7 +96,8 @@ async def get_payment(
 _ACCEPTED = {"ResultCode": 0, "ResultDesc": "Accepted"}
 
 
-@callback_router.post("/callback/{token}", include_in_schema=False)
+@callback_router.post(CALLBACK_PATH, include_in_schema=False)
+@callback_router.post(LEGACY_CALLBACK_PATH, include_in_schema=False)
 async def mpesa_callback(
     token: str,
     settings: Annotated[Settings, Depends(get_settings)],
