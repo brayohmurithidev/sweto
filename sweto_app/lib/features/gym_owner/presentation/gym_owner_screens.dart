@@ -202,7 +202,11 @@ class _AccountTypeScreenState extends ConsumerState<AccountTypeScreen> {
 }
 
 class GymRegistrationScreen extends ConsumerStatefulWidget {
-  const GymRegistrationScreen({super.key});
+  const GymRegistrationScreen({this.inSettings = false, super.key});
+
+  /// Opened from More on a verified gym: saving returns there instead
+  /// of moving on to the next onboarding step.
+  final bool inSettings;
   @override
   ConsumerState<GymRegistrationScreen> createState() =>
       _GymRegistrationScreenState();
@@ -335,6 +339,10 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
                 'Some photos could not be uploaded. Retry them to continue.',
           );
         }
+        return;
+      }
+      if (widget.inSettings) {
+        if (mounted) _savedInSettings(context);
         return;
       }
       final destination = await ref
@@ -499,45 +507,54 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
 
   @override
   Widget build(BuildContext context) => _OnboardingScaffold(
+    showAccountMenu: !widget.inSettings,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            IconButton(
-              key: const Key('gym-registration-back'),
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => context.goNamed(AppRoutes.splashName),
-            ),
-            Expanded(
-              child: Text(
-                'Step 1 of ${GymOwnerProgress.ordered.length}',
-                textAlign: TextAlign.center,
+        if (widget.inSettings)
+          const _SettingsHeader(
+            title: 'Gym profile',
+            subtitle:
+                'What members see: name, contacts, description and photos.',
+          )
+        else ...[
+          Row(
+            children: [
+              IconButton(
+                key: const Key('gym-registration-back'),
+                icon: const Icon(Icons.arrow_back),
+                onPressed: () => context.goNamed(AppRoutes.splashName),
               ),
-            ),
-            const SizedBox(width: 48),
-          ],
-        ),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(AppRadius.pill),
-          child: const LinearProgressIndicator(
-            key: Key('gym-registration-progress'),
-            value: 1 / 6,
-            minHeight: 4,
-            backgroundColor: AppColors.border,
-            valueColor: AlwaysStoppedAnimation(AppColors.primary),
+              Expanded(
+                child: Text(
+                  'Step 1 of ${GymOwnerProgress.ordered.length}',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+              const SizedBox(width: 48),
+            ],
           ),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          'Register Your Gym',
-          style: AppTextStyles.headingLarge.copyWith(color: AppColors.white),
-        ),
-        const SizedBox(height: AppSpacing.sm),
-        const Text(
-          'Let\'s get your gym set up on SWETO.',
-          style: AppTextStyles.bodyMedium,
-        ),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+            child: const LinearProgressIndicator(
+              key: Key('gym-registration-progress'),
+              value: 1 / 6,
+              minHeight: 4,
+              backgroundColor: AppColors.border,
+              valueColor: AlwaysStoppedAnimation(AppColors.primary),
+            ),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            'Register Your Gym',
+            style: AppTextStyles.headingLarge.copyWith(color: AppColors.white),
+          ),
+          const SizedBox(height: AppSpacing.sm),
+          const Text(
+            'Let\'s get your gym set up on SWETO.',
+            style: AppTextStyles.bodyMedium,
+          ),
+        ],
         const SizedBox(height: AppSpacing.sm),
         _GymPhotoSection(
           uploaded: _uploadedPhotos,
@@ -599,7 +616,9 @@ class _GymRegistrationScreenState extends ConsumerState<GymRegistrationScreen> {
         const SizedBox(height: AppSpacing.md),
         AppPrimaryButton(
           key: const Key('create-gym-button'),
-          label: _loading
+          label: widget.inSettings
+              ? (_loading ? 'Saving…' : 'Save changes')
+              : _loading
               ? (_editing ? 'Saving changes...' : 'Creating gym...')
               : (_editing ? 'Save & Continue' : 'Continue'),
           onPressed: _loading ? null : _submit,
@@ -865,7 +884,11 @@ class _CoverBadge extends StatelessWidget {
 }
 
 class GymPricingScreen extends ConsumerStatefulWidget {
-  const GymPricingScreen({super.key});
+  const GymPricingScreen({this.inSettings = false, super.key});
+
+  /// Opened from More on a verified gym: saving returns there instead
+  /// of moving on to the next onboarding step.
+  final bool inSettings;
   @override
   ConsumerState<GymPricingScreen> createState() => _GymPricingScreenState();
 }
@@ -890,6 +913,10 @@ class _GymPricingScreenState extends ConsumerState<GymPricingScreen> {
   String? _error;
   bool _loading = true;
   bool _saving = false;
+
+  /// Saved plans this screen has no card for (made elsewhere). Saving sends
+  /// them back unchanged; leaving them out would delete them.
+  final _untouched = <GymPricingPlan>[];
   @override
   void initState() {
     super.initState();
@@ -912,6 +939,7 @@ class _GymPricingScreenState extends ConsumerState<GymPricingScreen> {
       final pricing = await repo.getGymPricing(gym.id);
       if (!mounted) return;
       final all = [...pricing.dayPasses, ...pricing.membershipPlans];
+      _untouched.clear();
       if (all.isNotEmpty) {
         _dayPass.active = false;
         for (final plan in _plans) {
@@ -922,7 +950,10 @@ class _GymPricingScreenState extends ConsumerState<GymPricingScreen> {
         final target = saved.billingPeriod == 'day_pass'
             ? _dayPass
             : _plans.where((p) => p.period == saved.billingPeriod).firstOrNull;
-        if (target == null) continue;
+        if (target == null) {
+          _untouched.add(saved);
+          continue;
+        }
         target.controller.text = saved.amount.toString();
         target.active = saved.isActive;
       }
@@ -1032,6 +1063,9 @@ class _GymPricingScreenState extends ConsumerState<GymPricingScreen> {
                       isActive: p.active,
                     ),
                   )
+                  .followedBy(
+                    _untouched.where((p) => p.billingPeriod == 'day_pass'),
+                  )
                   .toList(),
               membershipPlans: _plans
                   .where(_hasPrice)
@@ -1043,9 +1077,16 @@ class _GymPricingScreenState extends ConsumerState<GymPricingScreen> {
                       isActive: p.active,
                     ),
                   )
+                  .followedBy(
+                    _untouched.where((p) => p.billingPeriod != 'day_pass'),
+                  )
                   .toList(),
             ),
           );
+      if (widget.inSettings) {
+        if (mounted) _savedInSettings(context);
+        return;
+      }
       final destination = await ref
           .read(onboardingCoordinatorProvider)
           .resolve();
@@ -1062,39 +1103,48 @@ class _GymPricingScreenState extends ConsumerState<GymPricingScreen> {
 
   @override
   Widget build(BuildContext context) => _OnboardingScaffold(
+    showAccountMenu: !widget.inSettings,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            IconButton(
-              tooltip: 'Back',
-              onPressed: () => context.canPop()
-                  ? context.pop()
-                  : context.goNamed(AppRoutes.gymOperatingHoursName),
-              icon: const Icon(Icons.arrow_back),
-            ),
-            Expanded(
-              child: Text(
-                'Step 6 of 7',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.bodyMedium,
+        if (widget.inSettings)
+          const _SettingsHeader(
+            title: 'Plans & prices',
+            subtitle:
+                'New prices apply to the next payment. Members keep what they already paid for.',
+          )
+        else ...[
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Back',
+                onPressed: () => context.canPop()
+                    ? context.pop()
+                    : context.goNamed(AppRoutes.gymOperatingHoursName),
+                icon: const Icon(Icons.arrow_back),
               ),
-            ),
-            const SizedBox(width: 48),
-          ],
-        ),
-        const SizedBox(height: 8),
-        const LinearProgressIndicator(value: 6 / 7, minHeight: 3),
-        const SizedBox(height: 24),
-        Text('Membership Plans', style: AppTextStyles.headingLarge),
-        const SizedBox(height: 8),
-        Text('Set your membership pricing.', style: AppTextStyles.bodyMedium),
-        const SizedBox(height: 6),
-        Text(
-          'Members will see these plans when booking your gym.',
-          style: AppTextStyles.bodySmall,
-        ),
+              Expanded(
+                child: Text(
+                  'Step 6 of 7',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.bodyMedium,
+                ),
+              ),
+              const SizedBox(width: 48),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const LinearProgressIndicator(value: 6 / 7, minHeight: 3),
+          const SizedBox(height: 24),
+          Text('Membership Plans', style: AppTextStyles.headingLarge),
+          const SizedBox(height: 8),
+          Text('Set your membership pricing.', style: AppTextStyles.bodyMedium),
+          const SizedBox(height: 6),
+          Text(
+            'Members will see these plans when booking your gym.',
+            style: AppTextStyles.bodySmall,
+          ),
+        ],
         const SizedBox(height: 24),
         if (_loading)
           const Center(
@@ -1135,7 +1185,9 @@ class _GymPricingScreenState extends ConsumerState<GymPricingScreen> {
           const SizedBox(height: 28),
           AppPrimaryButton(
             key: const Key('gym-pricing-continue'),
-            label: _saving ? 'Saving…' : 'Continue',
+            label: _saving
+                ? 'Saving…'
+                : (widget.inSettings ? 'Save changes' : 'Continue'),
             onPressed: _saving ? null : _save,
           ),
         ],
@@ -1223,7 +1275,11 @@ class _PricingCard extends StatelessWidget {
 }
 
 class GymOperatingHoursScreen extends ConsumerStatefulWidget {
-  const GymOperatingHoursScreen({super.key});
+  const GymOperatingHoursScreen({this.inSettings = false, super.key});
+
+  /// Opened from More on a verified gym: saving returns there instead
+  /// of moving on to the next onboarding step.
+  final bool inSettings;
   @override
   ConsumerState<GymOperatingHoursScreen> createState() =>
       _GymOperatingHoursScreenState();
@@ -1385,6 +1441,10 @@ class _GymOperatingHoursScreenState
                 )
                 .toList(),
           );
+      if (widget.inSettings) {
+        if (mounted) _savedInSettings(context);
+        return;
+      }
       final destination = await ref
           .read(onboardingCoordinatorProvider)
           .resolve();
@@ -1401,35 +1461,43 @@ class _GymOperatingHoursScreenState
 
   @override
   Widget build(BuildContext context) => _OnboardingScaffold(
+    showAccountMenu: !widget.inSettings,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            IconButton(
-              tooltip: 'Back',
-              onPressed: () => context.goNamed(AppRoutes.gymAmenitiesName),
-              icon: const Icon(Icons.arrow_back),
-            ),
-            Expanded(
-              child: Text(
-                'Step 5 of 7',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.bodyMedium,
+        if (widget.inSettings)
+          const _SettingsHeader(
+            title: 'Opening hours',
+            subtitle: 'When members can come in.',
+          )
+        else ...[
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Back',
+                onPressed: () => context.goNamed(AppRoutes.gymAmenitiesName),
+                icon: const Icon(Icons.arrow_back),
               ),
-            ),
-            const SizedBox(width: 48),
-          ],
-        ),
-        const SizedBox(height: 8),
-        const LinearProgressIndicator(value: 5 / 7, minHeight: 3),
-        const SizedBox(height: 24),
-        Text('Operating Hours', style: AppTextStyles.headingLarge),
-        const SizedBox(height: 8),
-        Text(
-          'Set when members can access your gym.',
-          style: AppTextStyles.bodyMedium,
-        ),
+              Expanded(
+                child: Text(
+                  'Step 5 of 7',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.bodyMedium,
+                ),
+              ),
+              const SizedBox(width: 48),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const LinearProgressIndicator(value: 5 / 7, minHeight: 3),
+          const SizedBox(height: 24),
+          Text('Operating Hours', style: AppTextStyles.headingLarge),
+          const SizedBox(height: 8),
+          Text(
+            'Set when members can access your gym.',
+            style: AppTextStyles.bodyMedium,
+          ),
+        ],
         const SizedBox(height: 24),
         if (_loading)
           const Center(
@@ -1500,7 +1568,9 @@ class _GymOperatingHoursScreenState
           const SizedBox(height: 28),
           AppPrimaryButton(
             key: const Key('gym-operating-hours-continue'),
-            label: _saving ? 'Saving…' : 'Continue',
+            label: _saving
+                ? 'Saving…'
+                : (widget.inSettings ? 'Save changes' : 'Continue'),
             onPressed: _saving ? null : _save,
           ),
         ],
@@ -1637,7 +1707,11 @@ class _OperatingDayCard extends StatelessWidget {
 }
 
 class GymAmenitiesScreen extends ConsumerStatefulWidget {
-  const GymAmenitiesScreen({super.key});
+  const GymAmenitiesScreen({this.inSettings = false, super.key});
+
+  /// Opened from More on a verified gym: saving returns there instead
+  /// of moving on to the next onboarding step.
+  final bool inSettings;
 
   @override
   ConsumerState<GymAmenitiesScreen> createState() => _GymAmenitiesScreenState();
@@ -1689,6 +1763,10 @@ class _GymAmenitiesScreenState extends ConsumerState<GymAmenitiesScreen> {
       await ref
           .read(gymOwnerRepositoryProvider)
           .updateGymAmenities(_gymId!, _selected);
+      if (widget.inSettings) {
+        if (mounted) _savedInSettings(context);
+        return;
+      }
       final destination = await ref
           .read(onboardingCoordinatorProvider)
           .resolve();
@@ -1728,37 +1806,45 @@ class _GymAmenitiesScreenState extends ConsumerState<GymAmenitiesScreen> {
 
   @override
   Widget build(BuildContext context) => _OnboardingScaffold(
+    showAccountMenu: !widget.inSettings,
     child: Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            IconButton(
-              tooltip: 'Back',
-              onPressed: () => context.canPop()
-                  ? context.pop()
-                  : context.goNamed(AppRoutes.gymBusinessDetailsName),
-              icon: const Icon(Icons.arrow_back),
-            ),
-            Expanded(
-              child: Text(
-                'Step 4 of 7',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.bodyMedium,
+        if (widget.inSettings)
+          const _SettingsHeader(
+            title: 'Amenities',
+            subtitle: 'Everything available at your gym.',
+          )
+        else ...[
+          Row(
+            children: [
+              IconButton(
+                tooltip: 'Back',
+                onPressed: () => context.canPop()
+                    ? context.pop()
+                    : context.goNamed(AppRoutes.gymBusinessDetailsName),
+                icon: const Icon(Icons.arrow_back),
               ),
-            ),
-            const SizedBox(width: 48),
-          ],
-        ),
-        const SizedBox(height: 8),
-        const LinearProgressIndicator(value: 4 / 7, minHeight: 3),
-        const SizedBox(height: 24),
-        Text('Amenities', style: AppTextStyles.headingLarge),
-        const SizedBox(height: 8),
-        Text(
-          'Select everything available at your gym.',
-          style: AppTextStyles.bodyMedium,
-        ),
+              Expanded(
+                child: Text(
+                  'Step 4 of 7',
+                  textAlign: TextAlign.center,
+                  style: AppTextStyles.bodyMedium,
+                ),
+              ),
+              const SizedBox(width: 48),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const LinearProgressIndicator(value: 4 / 7, minHeight: 3),
+          const SizedBox(height: 24),
+          Text('Amenities', style: AppTextStyles.headingLarge),
+          const SizedBox(height: 8),
+          Text(
+            'Select everything available at your gym.',
+            style: AppTextStyles.bodyMedium,
+          ),
+        ],
         const SizedBox(height: 28),
         if (_loading)
           const Center(
@@ -1812,7 +1898,9 @@ class _GymAmenitiesScreenState extends ConsumerState<GymAmenitiesScreen> {
           const SizedBox(height: 28),
           AppPrimaryButton(
             key: const Key('gym-amenities-continue'),
-            label: 'Continue',
+            label: _saving
+                ? 'Saving…'
+                : (widget.inSettings ? 'Save changes' : 'Continue'),
             onPressed: _saving ? null : _save,
           ),
         ],
@@ -2279,7 +2367,11 @@ class GymBusinessDetailsScreenStateTypes {
 }
 
 class GymLocationScreen extends ConsumerStatefulWidget {
-  const GymLocationScreen({super.key});
+  const GymLocationScreen({this.inSettings = false, super.key});
+
+  /// Opened from More on a verified gym: saving returns there instead
+  /// of moving on to the next onboarding step.
+  final bool inSettings;
   @override
   ConsumerState<GymLocationScreen> createState() => _GymLocationScreenState();
 }
@@ -2445,6 +2537,10 @@ class _GymLocationScreenState extends ConsumerState<GymLocationScreen> {
               countryCode: 'KE',
             ),
           );
+      if (widget.inSettings) {
+        if (mounted) _savedInSettings(context);
+        return;
+      }
       final destination = await ref
           .read(onboardingCoordinatorProvider)
           .resolve();
@@ -2466,6 +2562,7 @@ class _GymLocationScreenState extends ConsumerState<GymLocationScreen> {
 
   @override
   Widget build(BuildContext context) => _OnboardingScaffold(
+    showAccountMenu: !widget.inSettings,
     child: _loading
         ? const Center(
             child: CircularProgressIndicator(color: AppColors.primary),
@@ -2473,44 +2570,53 @@ class _GymLocationScreenState extends ConsumerState<GymLocationScreen> {
         : Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back),
-                    onPressed: () => context.canPop()
-                        ? context.pop()
-                        : context.goNamed(AppRoutes.gymRegistrationName),
+              if (widget.inSettings)
+                const _SettingsHeader(
+                  title: 'Location',
+                  subtitle: 'Where members find your gym.',
+                )
+              else ...[
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back),
+                      onPressed: () => context.canPop()
+                          ? context.pop()
+                          : context.goNamed(AppRoutes.gymRegistrationName),
+                    ),
+                    Expanded(
+                      child: Text(
+                        'Step 2 of ${GymOwnerProgress.ordered.length}',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.xs,
                   ),
-                  Expanded(
-                    child: Text(
-                      'Step 2 of ${GymOwnerProgress.ordered.length}',
-                      textAlign: TextAlign.center,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(AppRadius.pill),
+                    child: const LinearProgressIndicator(
+                      value: 2 / 7,
+                      minHeight: 4,
+                      backgroundColor: AppColors.border,
+                      valueColor: AlwaysStoppedAnimation(AppColors.primary),
                     ),
                   ),
-                  const SizedBox(width: 48),
-                ],
-              ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(AppRadius.pill),
-                  child: const LinearProgressIndicator(
-                    value: 2 / 7,
-                    minHeight: 4,
-                    backgroundColor: AppColors.border,
-                    valueColor: AlwaysStoppedAnimation(AppColors.primary),
+                ),
+                const SizedBox(height: AppSpacing.sm),
+                Text(
+                  'Set Gym Location',
+                  style: AppTextStyles.headingLarge.copyWith(
+                    color: AppColors.white,
                   ),
                 ),
-              ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Set Gym Location',
-                style: AppTextStyles.headingLarge.copyWith(
-                  color: AppColors.white,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.xs),
-              const Text('Help members find your gym easily.'),
+                const SizedBox(height: AppSpacing.xs),
+                const Text('Help members find your gym easily.'),
+              ],
               const SizedBox(height: AppSpacing.sm),
               SizedBox(
                 height: 270,
@@ -2620,7 +2726,9 @@ class _GymLocationScreenState extends ConsumerState<GymLocationScreen> {
               const SizedBox(height: AppSpacing.md),
               AppPrimaryButton(
                 key: const Key('location-continue'),
-                label: _saving ? 'Saving...' : 'Continue',
+                label: _saving
+                    ? 'Saving…'
+                    : (widget.inSettings ? 'Save changes' : 'Continue'),
                 onPressed: _canSave ? _save : null,
               ),
             ],
@@ -3499,6 +3607,57 @@ class _VerificationPendingScreenState
           key: const Key('verification-pending-logout'),
           onPressed: _loggingOut ? null : _logout,
           child: Text(_loggingOut ? 'Signing out...' : 'Log out'),
+        ),
+      ],
+    ),
+  );
+}
+
+/// Back to More after a settings save, with a short confirmation.
+void _savedInSettings(BuildContext context) {
+  showSwetoSnackBar(
+    context,
+    message: 'Changes saved.',
+    type: SwetoSnackBarType.success,
+  );
+  context.pop(true);
+}
+
+/// Title row for an onboarding screen opened from More.
+class _SettingsHeader extends StatelessWidget {
+  const _SettingsHeader({required this.title, required this.subtitle});
+
+  final String title;
+  final String subtitle;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: AppSpacing.md),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            IconButton(
+              key: const Key('settings-back'),
+              tooltip: 'Back',
+              onPressed: () => context.pop(),
+              icon: const Icon(Icons.arrow_back),
+            ),
+            const SizedBox(width: 4),
+            Expanded(
+              child: Text(
+                title,
+                style: AppTextStyles.headingMedium,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        Padding(
+          padding: const EdgeInsets.only(left: 8),
+          child: Text(subtitle, style: AppTextStyles.bodySmall),
         ),
       ],
     ),

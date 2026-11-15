@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:sweto_app/core/router/app_routes.dart';
 import 'package:sweto_app/features/gym_owner/presentation/home/finance_tab.dart';
+import 'package:sweto_app/features/gym_owner/presentation/home/more_tab.dart';
 import 'package:sweto_app/features/gym_owner/presentation/home/owner_shell.dart';
 import 'package:sweto_app/features/members/domain/member_entities.dart';
 import 'package:sweto_app/features/members/presentation/members_providers.dart';
@@ -177,6 +178,16 @@ void main() {
 
     await tester.tap(find.text('More'));
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('more-logout')),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(MoreTab),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     await tester.tap(find.byKey(const Key('more-logout')));
     expect(logouts, ['logout']);
 
