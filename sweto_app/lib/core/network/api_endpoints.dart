@@ -14,6 +14,13 @@ class ApiEndpoints {
   static const logout = '/api/v1/auth/logout';
 
   static const currentUser = '/api/v1/auth/me';
+  static const adminGymVerifications = '/api/v1/admin/gym-verifications';
+  static String adminGymVerification(String gymId) =>
+      '$adminGymVerifications/$gymId';
+  static String adminGymReview(String gymId) =>
+      '$adminGymVerifications/$gymId/review';
+  static String gymVerificationDownload(String gymId, String documentType) =>
+      '/api/v1/gyms/$gymId/verification/documents/$documentType/download';
   static const accountOnboarding = '/api/v1/account/onboarding';
   static const accountRoles = '/api/v1/account/roles';
   static const gyms = '/api/v1/gyms';

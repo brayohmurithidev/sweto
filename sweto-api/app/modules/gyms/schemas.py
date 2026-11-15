@@ -740,6 +740,11 @@ class GymVerificationData(BaseModel):
     documents: list[GymVerificationDocumentData]
     review_history: list["GymVerificationReviewData"]
     onboarding: GymOnboardingData
+    gym: GymData | None = Field(
+        default=None,
+        description="The gym being verified: name, contacts, business and "
+        "location details, for the reviewer.",
+    )
 
 
 class GymVerificationReviewRequest(BaseModel):

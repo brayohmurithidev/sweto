@@ -1747,6 +1747,7 @@ class GymService:
             ],
             review_history=[self._build_review_data(item) for item in reviews],
             onboarding=self._build_onboarding_data(gym),
+            gym=self._build_gym_data(gym),
         )
 
     @staticmethod

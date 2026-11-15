@@ -67,4 +67,12 @@ class AppRoutes {
 
   static const healthName = 'health';
   static const healthPath = '/health';
+
+  // SWETO staff.
+  static const adminSignInName = 'admin-sign-in';
+  static const adminSignInPath = '/auth/staff';
+  static const adminHomeName = 'admin-home';
+  static const adminHomePath = '/admin';
+  static const adminGymReviewName = 'admin-gym-review';
+  static const adminGymReviewPath = '/admin/gyms/:gymId';
 }

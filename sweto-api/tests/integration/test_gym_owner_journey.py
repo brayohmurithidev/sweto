@@ -215,6 +215,17 @@ async def test_owner_onboards_is_approved_and_becomes_listed(
     queue = await admin.call("GET", "/admin/gym-verifications")
     assert [item["gym_id"] for item in queue.json()["data"]["gyms"]] == [gym_id]
 
+    # The reviewer sees what they're approving.
+    detail = (await admin.call("GET", f"/admin/gym-verifications/{gym_id}")).json()
+    reviewed_gym = detail["data"]["gym"]
+    assert reviewed_gym["name"] == "FlexFit Westlands"
+    assert reviewed_gym["legal_business_name"] == "FlexFit Wellness Limited"
+    assert reviewed_gym["contact_person_name"] == "Wanjiru Kamau"
+    assert reviewed_gym["city"] == "Nairobi"
+    assert {doc["document_type"] for doc in detail["data"]["documents"]} >= set(
+        detail["data"]["required_document_types"]
+    )
+
     approved = await admin.call(
         "POST",
         f"/admin/gym-verifications/{gym_id}/review",
