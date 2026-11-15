@@ -6,10 +6,16 @@ import json
 import httpx
 import pytest
 
-from app.integrations.mpesa.base import MpesaError
+from app.integrations.mpesa.base import MpesaAccount, MpesaError
 from app.integrations.mpesa.daraja import DarajaGateway
 
 BASE = "https://sandbox.safaricom.co.ke"
+ACCOUNT = MpesaAccount(
+    shortcode="174379",
+    passkey="passkey",
+    transaction_type="CustomerPayBillOnline",
+    party_b="174379",
+)
 
 
 def gateway(handler: httpx.MockTransport) -> DarajaGateway:
@@ -17,10 +23,6 @@ def gateway(handler: httpx.MockTransport) -> DarajaGateway:
         base_url=BASE,
         consumer_key="key",
         consumer_secret="secret",
-        shortcode="174379",
-        passkey="passkey",
-        transaction_type="CustomerPayBillOnline",
-        party_b="174379",
         timeout_seconds=5,
         client=httpx.AsyncClient(transport=handler),
     )
@@ -45,6 +47,7 @@ async def test_stk_push_sends_daraja_fields_and_reuses_the_token() -> None:
     client = gateway(httpx.MockTransport(handle))
     for _ in range(2):
         accepted = await client.stk_push(
+            account=ACCOUNT,
             phone_number="+254711000001",
             amount=5000,
             account_reference="FlexFitWestlands",
@@ -83,6 +86,7 @@ async def test_rejections_and_pending_queries() -> None:
     client = gateway(httpx.MockTransport(handle))
     with pytest.raises(MpesaError) as raised:
         await client.stk_push(
+            account=ACCOUNT,
             phone_number="+254711000001",
             amount=1,
             account_reference="x",
@@ -93,7 +97,9 @@ async def test_rejections_and_pending_queries() -> None:
         "request_rejected",
         "400.002.02",
     )
-    assert await client.stk_query(checkout_request_id="ws_CO_1") is None
+    assert (
+        await client.stk_query(account=ACCOUNT, checkout_request_id="ws_CO_1") is None
+    )
 
 
 async def test_a_bad_key_is_reported_without_details() -> None:
@@ -101,5 +107,11 @@ async def test_a_bad_key_is_reported_without_details() -> None:
         return httpx.Response(400, text="Bad Request - Invalid Credentials")
 
     with pytest.raises(MpesaError) as raised:
-        await gateway(httpx.MockTransport(handle)).stk_query(checkout_request_id="x")
+        await gateway(httpx.MockTransport(handle)).stk_query(
+            account=ACCOUNT, checkout_request_id="x"
+        )
     assert raised.value.reason == "unauthorized"
+
+
+def test_the_passkey_never_shows_in_logs_or_reprs() -> None:
+    assert "passkey" not in repr(ACCOUNT).replace("MpesaAccount", "")

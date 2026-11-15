@@ -23,6 +23,7 @@ class FakeGateway:
         self.pushes: list[dict[str, Any]] = []
         self.push_error: MpesaError | None = None
         self.query_results: dict[str, StkResult | None] = {}
+        self.queried_accounts: list[Any] = []
 
     async def stk_push(self, **kwargs: Any) -> StkPushAccepted:
         if self.push_error:
@@ -33,7 +34,10 @@ class FakeGateway:
             checkout_request_id=f"ws_CO_{len(self.pushes)}",
         )
 
-    async def stk_query(self, *, checkout_request_id: str) -> StkResult | None:
+    async def stk_query(
+        self, *, account: Any, checkout_request_id: str
+    ) -> StkResult | None:
+        self.queried_accounts.append(account)
         return self.query_results.get(checkout_request_id)
 
 
@@ -49,6 +53,8 @@ def gateway(api: IntegrationAPI) -> FakeGateway:
     fake = FakeGateway()
     app.dependency_overrides[get_mpesa_gateway] = lambda: fake
     api.settings.mpesa_callback_token = SecretStr(TOKEN)
+    # Gyms without their own till use the default account outside production.
+    api.settings.mpesa_mode = "simulated"
     return fake
 
 

@@ -8,7 +8,12 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from app.integrations.mpesa.base import MpesaError, StkPushAccepted, StkResult
+from app.integrations.mpesa.base import (
+    MpesaAccount,
+    MpesaError,
+    StkPushAccepted,
+    StkResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -28,20 +33,12 @@ class DarajaGateway:
         base_url: str,
         consumer_key: str,
         consumer_secret: str,
-        shortcode: str,
-        passkey: str,
-        transaction_type: str,
-        party_b: str,
         timeout_seconds: float,
         client: httpx.AsyncClient | None = None,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._consumer_key = consumer_key
         self._consumer_secret = consumer_secret
-        self._shortcode = shortcode
-        self._passkey = passkey
-        self._transaction_type = transaction_type
-        self._party_b = party_b
         self._timeout = timeout_seconds
         self._client = client
         self._token: str | None = None
@@ -50,6 +47,7 @@ class DarajaGateway:
     async def stk_push(
         self,
         *,
+        account: MpesaAccount,
         phone_number: str,
         amount: int,
         account_reference: str,
@@ -58,11 +56,11 @@ class DarajaGateway:
     ) -> StkPushAccepted:
         msisdn = phone_number.removeprefix("+")
         body = {
-            **self._credentials(),
-            "TransactionType": self._transaction_type,
+            **self._credentials(account),
+            "TransactionType": account.transaction_type,
             "Amount": amount,
             "PartyA": msisdn,
-            "PartyB": self._party_b,
+            "PartyB": account.party_b,
             "PhoneNumber": msisdn,
             "CallBackURL": callback_url,
             # Daraja limits: 12 and 13 characters.
@@ -82,9 +80,11 @@ class DarajaGateway:
         except KeyError as exc:
             raise MpesaError("malformed_response", outcome_unknown=True) from exc
 
-    async def stk_query(self, *, checkout_request_id: str) -> StkResult | None:
+    async def stk_query(
+        self, *, account: MpesaAccount, checkout_request_id: str
+    ) -> StkResult | None:
         body: dict[str, object] = {
-            **self._credentials(),
+            **self._credentials(account),
             "CheckoutRequestID": checkout_request_id,
         }
         try:
@@ -101,13 +101,14 @@ class DarajaGateway:
         except (KeyError, ValueError) as exc:
             raise MpesaError("malformed_response") from exc
 
-    def _credentials(self) -> dict[str, str]:
+    @staticmethod
+    def _credentials(account: MpesaAccount) -> dict[str, str]:
         timestamp = datetime.now(_NAIROBI).strftime("%Y%m%d%H%M%S")
         password = base64.b64encode(
-            f"{self._shortcode}{self._passkey}{timestamp}".encode()
+            f"{account.shortcode}{account.passkey}{timestamp}".encode()
         ).decode()
         return {
-            "BusinessShortCode": self._shortcode,
+            "BusinessShortCode": account.shortcode,
             "Password": password,
             "Timestamp": timestamp,
         }

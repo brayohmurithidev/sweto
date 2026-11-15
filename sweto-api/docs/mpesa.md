@@ -34,7 +34,8 @@ Rules:
 | --- | --- |
 | `MPESA_MODE` | `disabled` (default), `simulated` (local only), `sandbox`, `production` |
 | `MPESA_CONSUMER_KEY`, `MPESA_CONSUMER_SECRET` | Daraja app credentials |
-| `MPESA_SHORTCODE`, `MPESA_PASSKEY` | Lipa na M-Pesa Online shortcode and passkey (sandbox: `174379` and Safaricom's test passkey) |
+| `MPESA_SHORTCODE`, `MPESA_PASSKEY` | Default account for gyms without their own, sandbox only (`174379` and Safaricom's test passkey) |
+| `MPESA_CREDENTIALS_KEY` | Fernet key that encrypts gyms' passkeys; required in production |
 | `MPESA_TRANSACTION_TYPE` | `CustomerPayBillOnline` (Pay Bill) or `CustomerBuyGoodsOnline` (Till) |
 | `MPESA_PARTY_B` | Till number for Buy Goods; defaults to the shortcode |
 | `MPESA_CALLBACK_BASE_URL` | Public https base of this API |
@@ -68,12 +69,26 @@ curl -X POST "http://localhost:8000/api/v1/payments/mpesa/callback/$MPESA_CALLBA
 
 Use `"ResultCode":1032` (and no metadata) to see a cancelled prompt.
 
-## Before going live: per-gym tills
+## Each gym's own till
 
-The decision is that money goes to **each gym's own till or pay bill**, with
-SWETO sending the prompt on its behalf. This version uses the one M-Pesa
-account in settings for every gym, which is right for the sandbox but would
-send every gym's money to one account in production. Before live payments:
-store each gym's shortcode/till (and passkey, encrypted) during onboarding and
-pick the gym's account when sending the prompt; `MpesaGateway` takes the
-account per call to make that change local.
+Money goes to **each gym's own Pay Bill or Till**; SWETO only sends the prompt.
+The owner adds it in the app (More → M-Pesa till), or with
+`PUT /gyms/{gym_id}/mpesa-account` (owner only):
+
+| Field | Pay Bill | Till (Buy Goods) |
+| --- | --- | --- |
+| `account_type` | `paybill` | `till` |
+| `shortcode` | the Pay Bill number | the store / head-office number the passkey belongs to |
+| `till_number` | not used | the till the money goes to |
+| `passkey` | Lipa na M-Pesa Online passkey from Safaricom | same |
+
+- The passkey is encrypted with `MPESA_CREDENTIALS_KEY` (Fernet) and never
+  returned; leave it out on later saves to keep it. Changing the key makes
+  saved passkeys unreadable, so keep it with the other secrets.
+- Generate a key with
+  `python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"`.
+- Every prompt and status query for a gym uses that gym's account. In
+  production a gym without one can't request M-Pesa payments; in sandbox and
+  simulated mode such gyms fall back to `MPESA_SHORTCODE`/`MPESA_PASSKEY`.
+- Safaricom must link each gym's shortcode to SWETO's Daraja app (their
+  "Go Live" process) before prompts from it work in production.

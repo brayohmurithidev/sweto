@@ -318,3 +318,28 @@ class PaymentTransaction(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     payment: Mapped[Payment] = relationship()
+
+
+class GymMpesaAccount(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """The gym's own M-Pesa Pay Bill or Till that members pay into.
+
+    SWETO sends the STK Push on the gym's behalf with SWETO's Daraja app, so
+    it needs the shortcode's Lipa na M-Pesa Online passkey. The passkey is
+    stored encrypted and never returned by the API.
+    """
+
+    __tablename__ = "gym_mpesa_accounts"
+    __table_args__ = (UniqueConstraint("gym_id", name="uq_gym_mpesa_accounts_gym"),)
+
+    gym_id: Mapped[UUID] = mapped_column(
+        ForeignKey("gyms.id", ondelete="CASCADE"), nullable=False
+    )
+    # paybill | till
+    account_type: Mapped[str] = mapped_column(String(10), nullable=False)
+    shortcode: Mapped[str] = mapped_column(String(10), nullable=False)
+    # Till number for Buy Goods; the shortcode itself for Pay Bill.
+    party_b: Mapped[str] = mapped_column(String(10), nullable=False)
+    passkey_encrypted: Mapped[str] = mapped_column(String(512), nullable=False)
+    updated_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )

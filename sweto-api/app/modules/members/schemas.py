@@ -1,8 +1,9 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.modules.gyms.enums import MembershipBillingPeriod
 from app.modules.members.enums import (
@@ -260,3 +261,40 @@ class DashboardData(BaseModel):
     check_ins_today: int
     revenue: RevenueSummary
     recent_activity: list[ActivityItem]
+
+
+class SaveMpesaAccountRequest(BaseModel):
+    account_type: Literal["paybill", "till"]
+    shortcode: str = Field(
+        pattern=r"^\d{5,7}$",
+        description="Pay Bill number, or the store/head-office number that "
+        "owns the till.",
+    )
+    till_number: str | None = Field(
+        default=None,
+        pattern=r"^\d{5,7}$",
+        description="Required for a till: where the money goes.",
+    )
+    passkey: str | None = Field(
+        default=None,
+        min_length=20,
+        max_length=128,
+        description="Lipa na M-Pesa Online passkey from Safaricom. Required "
+        "the first time; leave out to keep the saved one.",
+    )
+
+    @model_validator(mode="after")
+    def till_needs_number(self) -> "SaveMpesaAccountRequest":
+        if self.account_type == "till" and not self.till_number:
+            raise ValueError("A till needs its till number.")
+        return self
+
+
+class MpesaAccountData(BaseModel):
+    configured: bool
+    account_type: str | None = None
+    shortcode: str | None = None
+    till_number: str | None = None
+    passkey_saved: bool = False
+    updated_at: datetime | None = None
+    mode: str = Field(description="disabled, simulated, sandbox or production")

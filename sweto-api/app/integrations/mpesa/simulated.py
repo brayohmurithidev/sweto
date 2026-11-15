@@ -7,7 +7,7 @@ docs/mpesa.md), exactly as Safaricom would.
 import logging
 import uuid
 
-from app.integrations.mpesa.base import StkPushAccepted, StkResult
+from app.integrations.mpesa.base import MpesaAccount, StkPushAccepted, StkResult
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +16,7 @@ class SimulatedMpesaGateway:
     async def stk_push(
         self,
         *,
+        account: MpesaAccount,
         phone_number: str,
         amount: int,
         account_reference: str,
@@ -34,5 +35,7 @@ class SimulatedMpesaGateway:
             checkout_request_id=checkout,
         )
 
-    async def stk_query(self, *, checkout_request_id: str) -> StkResult | None:
+    async def stk_query(
+        self, *, account: MpesaAccount, checkout_request_id: str
+    ) -> StkResult | None:
         return None

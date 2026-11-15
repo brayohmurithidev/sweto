@@ -27,6 +27,24 @@ class MpesaError(Exception):
 
 
 @dataclass(frozen=True, slots=True)
+class MpesaAccount:
+    """The shortcode an STK Push is sent from and paid into.
+
+    Pay Bill: ``party_b`` is the shortcode itself. Till (Buy Goods):
+    ``shortcode`` is the store/head-office number the passkey belongs to and
+    ``party_b`` is the till number the money goes to.
+    """
+
+    shortcode: str
+    passkey: str
+    transaction_type: str
+    party_b: str
+
+    def __repr__(self) -> str:  # never print the passkey
+        return f"MpesaAccount(shortcode={self.shortcode!r}, party_b={self.party_b!r})"
+
+
+@dataclass(frozen=True, slots=True)
 class StkPushAccepted:
     merchant_request_id: str
     checkout_request_id: str
@@ -50,6 +68,7 @@ class MpesaGateway(Protocol):
     async def stk_push(
         self,
         *,
+        account: MpesaAccount,
         phone_number: str,
         amount: int,
         account_reference: str,
@@ -59,7 +78,9 @@ class MpesaGateway(Protocol):
         """Send the PIN prompt to an E.164 phone. Raise MpesaError on failure."""
         ...
 
-    async def stk_query(self, *, checkout_request_id: str) -> StkResult | None:
+    async def stk_query(
+        self, *, account: MpesaAccount, checkout_request_id: str
+    ) -> StkResult | None:
         """The final result, or None while the member hasn't answered yet."""
         ...
 

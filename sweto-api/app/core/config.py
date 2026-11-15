@@ -100,8 +100,14 @@ class Settings(BaseSettings):
     mpesa_mode: Literal["disabled", "simulated", "sandbox", "production"] = "disabled"
     mpesa_consumer_key: SecretStr | None = None
     mpesa_consumer_secret: SecretStr | None = None
+    # A default account for gyms without their own: sandbox only. In
+    # production every gym brings its own till.
     mpesa_shortcode: str | None = None
     mpesa_passkey: SecretStr | None = None
+    # Fernet key that encrypts each gym's passkey at rest. Generate with:
+    # python -c "from cryptography.fernet import Fernet;
+    # print(Fernet.generate_key().decode())"
+    mpesa_credentials_key: SecretStr | None = None
     mpesa_transaction_type: Literal[
         "CustomerPayBillOnline", "CustomerBuyGoodsOnline"
     ] = "CustomerPayBillOnline"
@@ -223,8 +229,7 @@ class Settings(BaseSettings):
                 {
                     "MPESA_CONSUMER_KEY": self.mpesa_consumer_key,
                     "MPESA_CONSUMER_SECRET": self.mpesa_consumer_secret,
-                    "MPESA_SHORTCODE": self.mpesa_shortcode,
-                    "MPESA_PASSKEY": self.mpesa_passkey,
+                    "MPESA_CREDENTIALS_KEY": self.mpesa_credentials_key,
                     "MPESA_CALLBACK_BASE_URL": self.mpesa_callback_base_url,
                     "MPESA_CALLBACK_TOKEN": self.mpesa_callback_token,
                 }
@@ -237,6 +242,17 @@ class Settings(BaseSettings):
             base = self.mpesa_callback_base_url or ""
             if not base.startswith("https://"):
                 raise ValueError("MPESA_CALLBACK_BASE_URL must use https.")
+        key = self.mpesa_credentials_key
+        if key is not None and key.get_secret_value():
+            from cryptography.fernet import Fernet
+
+            try:
+                Fernet(key.get_secret_value().encode())
+            except ValueError as exc:
+                raise ValueError(
+                    "MPESA_CREDENTIALS_KEY must be a Fernet key (32 url-safe "
+                    "base64-encoded bytes)."
+                ) from exc
         token = self.mpesa_callback_token
         # Blank (as in .env.example) means unset.
         if token is not None and 0 < len(token.get_secret_value()) < 24:
