@@ -44,12 +44,26 @@ def _opt_out(gym_phone: str | None) -> str:
     return "To stop SMS, tell the gym."
 
 
+def _period(paid_until: date, starts_on: date | None) -> str:
+    """ "Paid until 13 Dec", or "Starts 17 Nov, paid until 16 Dec" when the
+    period begins on a later day."""
+
+    if starts_on is None:
+        return f"Paid until {_day(paid_until)}"
+    return f"Starts {_day(starts_on)}, paid until {_day(paid_until)}"
+
+
 def welcome(
-    *, gym_name: str, gym_phone: str | None, code: str, paid_until: date
+    *,
+    gym_name: str,
+    gym_phone: str | None,
+    code: str,
+    paid_until: date,
+    starts_on: date | None = None,
 ) -> str:
     return (
         f"Welcome to {_gym(gym_name)}! Check-in code: {code}. Show it at the "
-        f"door. Paid until {_day(paid_until)}. {_opt_out(gym_phone)}"
+        f"door. {_period(paid_until, starts_on)}. {_opt_out(gym_phone)}"
     )
 
 
@@ -60,10 +74,12 @@ def payment_receipt(
     amount: Decimal,
     currency: str,
     paid_until: date,
+    starts_on: date | None = None,
 ) -> str:
+    period = _period(paid_until, starts_on)
     return (
         f"{_gym(gym_name)}: received {_money(amount, currency)}. Membership "
-        f"paid until {_day(paid_until)}. {_opt_out(gym_phone)}"
+        f"{period[0].lower()}{period[1:]}. {_opt_out(gym_phone)}"
     )
 
 

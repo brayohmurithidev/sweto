@@ -65,7 +65,14 @@ class FakeMembers implements MembersRepository {
     listCalls.add((standing, search));
     if (listError != null) throw listError!;
     final found = members
-        .where((m) => standing == null || m.standing == standing)
+        .where(
+          (m) =>
+              standing == null ||
+              m.standing == standing ||
+              // Like the API: the Active tab includes members starting later.
+              (standing == MemberStanding.active &&
+                  m.standing == MemberStanding.upcoming),
+        )
         .where(
           (m) =>
               search == null ||
@@ -365,6 +372,7 @@ Future<void> _pump(
         path: AppRoutes.memberDetailPath,
         name: AppRoutes.memberDetailName,
         builder: (_, s) => MemberDetailScreen(
+          today: _today,
           gymId: s.pathParameters['gymId']!,
           memberId: s.pathParameters['memberId']!,
         ),
@@ -550,6 +558,56 @@ void main() {
       expect(find.byKey(const Key('member-row-m-new')), findsOneWidget);
     });
 
+    testWidgets('a member can pay now and start on a later day', (
+      tester,
+    ) async {
+      final repo = FakeMembers();
+      await _pump(tester, repo, location: '/gyms/$_gymId/members');
+      await tester.tap(find.byKey(const Key('add-member-button')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('member-name-field')),
+        'Starts Monday',
+      );
+      await tester.enterText(
+        find.byKey(const Key('member-phone-input')),
+        '0711000001',
+      );
+      await tester.ensureVisible(find.byKey(const Key('member-start-date')));
+      await tester.tap(find.byKey(const Key('member-start-date')));
+      await tester.pumpAndSettle();
+      expect(find.text('When does this membership start?'), findsOneWidget);
+      await tester.tap(find.text('16'));
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(find.text('Starts 16 Nov 2026'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('add-member-submit')));
+      await tester.pumpAndSettle();
+      expect(repo.payments.single.$2.startsOn, DateTime(2026, 11, 16));
+    });
+
+    testWidgets('a member starting later shows their start date', (
+      tester,
+    ) async {
+      final repo = FakeMembers()
+        ..members.add(
+          GymMember(
+            id: 'm1',
+            fullName: 'Starts Monday',
+            phoneNumber: '+254711000001',
+            status: MemberStatus.active,
+            standing: MemberStanding.upcoming,
+            paidUntil: DateTime(2026, 11, 22),
+            startsOn: DateTime(2026, 11, 16),
+          ),
+        );
+      await _pump(tester, repo, location: '/gyms/$_gymId/members');
+      expect(find.textContaining('Starts 16 Nov 2026'), findsOneWidget);
+      expect(MemberStanding.fromApi('upcoming'), MemberStanding.upcoming);
+    });
+
     testWidgets('a duplicate phone keeps the form open with the reason', (
       tester,
     ) async {
@@ -613,6 +671,50 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('KES 4,500'), findsOneWidget);
+    });
+
+    testWidgets('a lapsed member can pay now and start on a later day', (
+      tester,
+    ) async {
+      final repo = FakeMembers()
+        ..members.add(
+          fakeMember(
+            '1',
+            'Achieng Otieno',
+            standing: MemberStanding.expired,
+            paidUntil: DateTime(2026, 11, 1),
+          ),
+        );
+      await _pump(tester, repo, location: '/gyms/$_gymId/members/1');
+
+      await tester.tap(find.byKey(const Key('record-cash-button')));
+      await tester.pumpAndSettle();
+      expect(find.text('Starts today'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('cash-start-date')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('16'));
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(find.text('Starts 16 Nov 2026'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('cash-payment-submit')));
+      await tester.pumpAndSettle();
+
+      expect(repo.payments.single.$2.startsOn, DateTime(2026, 11, 16));
+    });
+
+    testWidgets('a member still covered renews without a start date', (
+      tester,
+    ) async {
+      final repo = FakeMembers()
+        ..members.add(fakeMember('1', 'Achieng Otieno'));
+      await _pump(tester, repo, location: '/gyms/$_gymId/members/1');
+
+      await tester.tap(find.byKey(const Key('record-cash-button')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('cash-start-date')), findsNothing);
+      await tester.tap(find.byKey(const Key('cash-payment-submit')));
+      await tester.pumpAndSettle();
+      expect(repo.payments.single.$2.startsOn, isNull);
     });
 
     testWidgets('failure keeps the sheet open with the reason', (tester) async {

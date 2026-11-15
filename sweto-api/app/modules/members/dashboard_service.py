@@ -16,7 +16,7 @@ from app.modules.members.enums import (
 )
 from app.modules.members.models import GymCheckIn, GymMember, GymMembership, Payment
 from app.modules.members.periods import EXPIRING_WITHIN_DAYS, add_months
-from app.modules.members.repository import paid_until_column
+from app.modules.members.repository import current_start_column, paid_until_column
 from app.modules.members.schemas import (
     ActivityItem,
     DailyRevenue,
@@ -49,6 +49,8 @@ class DashboardService:
         current = select(func.count()).where(
             GymMember.gym_id == gym.id,
             GymMember.status == GymMemberStatus.ACTIVE,
+            # Paid but starting on a later day: not active yet.
+            current_start_column(today) <= today,
         )
         active = await self.session.scalar(current.where(paid_until >= today)) or 0
         expiring = (

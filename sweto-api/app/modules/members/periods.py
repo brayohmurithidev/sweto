@@ -6,6 +6,8 @@ from datetime import date, timedelta
 from app.modules.gyms.enums import MembershipBillingPeriod
 
 EXPIRING_WITHIN_DAYS = 7
+# A membership paid now can start up to this many days later.
+FUTURE_START_LIMIT_DAYS = 30
 """A membership ending today or in the next 6 days counts as expiring."""
 
 _MONTHS = {

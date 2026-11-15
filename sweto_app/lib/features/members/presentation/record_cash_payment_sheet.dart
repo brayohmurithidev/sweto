@@ -9,13 +9,19 @@ import 'package:sweto_app/features/gym_owner/presentation/onboarding_coordinator
 import 'package:sweto_app/features/members/domain/member_entities.dart';
 import 'package:sweto_app/features/members/presentation/cash_payment_form.dart';
 import 'package:sweto_app/features/members/presentation/members_providers.dart';
+import 'package:sweto_app/features/members/presentation/start_date_tile.dart';
 import 'package:sweto_app/shared/widgets/app_primary_button.dart';
 
 /// Records cash for [member]; resolves to the refreshed detail, or null.
+///
+/// A member with no current period (expired, never paid) can also pick a
+/// start date: paid earlier, or starting later. A member still covered
+/// renews from the end of their current period, so the API takes no date.
 Future<MemberDetail?> showRecordCashPaymentSheet(
   BuildContext context, {
   required String gymId,
   required GymMember member,
+  DateTime? today,
 }) => showModalBottomSheet<MemberDetail>(
   context: context,
   isScrollControlled: true,
@@ -25,14 +31,22 @@ Future<MemberDetail?> showRecordCashPaymentSheet(
       top: Radius.circular(AppRadius.bottomSheet),
     ),
   ),
-  builder: (_) => _RecordCashPaymentSheet(gymId: gymId, member: member),
+  builder: (_) =>
+      _RecordCashPaymentSheet(gymId: gymId, member: member, today: today),
 );
 
 class _RecordCashPaymentSheet extends ConsumerStatefulWidget {
-  const _RecordCashPaymentSheet({required this.gymId, required this.member});
+  const _RecordCashPaymentSheet({
+    required this.gymId,
+    required this.member,
+    this.today,
+  });
 
   final String gymId;
   final GymMember member;
+
+  /// Overrides "today" in tests.
+  final DateTime? today;
 
   @override
   ConsumerState<_RecordCashPaymentSheet> createState() => _SheetState();
@@ -42,8 +56,18 @@ class _SheetState extends ConsumerState<_RecordCashPaymentSheet> {
   List<GymPricingPlan>? _plans;
   GymPricingPlan? _plan;
   int? _amount;
+  DateTime? _startsOn;
   bool _saving = false;
   String? _error;
+
+  DateTime get _today {
+    final now = widget.today ?? DateTime.now();
+    return DateTime(now.year, now.month, now.day);
+  }
+
+  bool get _canPickStart =>
+      widget.member.standing == MemberStanding.expired ||
+      widget.member.standing == MemberStanding.noMembership;
 
   @override
   void initState() {
@@ -80,7 +104,11 @@ class _SheetState extends ConsumerState<_RecordCashPaymentSheet> {
           .recordCashPayment(
             widget.gymId,
             widget.member.id,
-            CashPaymentInput(planId: plan.id!, amount: amount),
+            CashPaymentInput(
+              planId: plan.id!,
+              amount: amount,
+              startsOn: _canPickStart && _startsOn != _today ? _startsOn : null,
+            ),
           );
       if (mounted) Navigator.of(context).pop(detail);
     } catch (error) {
@@ -127,6 +155,15 @@ class _SheetState extends ConsumerState<_RecordCashPaymentSheet> {
                 _amount = amount;
               }),
             ),
+          if (plans != null && plans.isNotEmpty && _canPickStart) ...[
+            const SizedBox(height: AppSpacing.xs),
+            StartDateTile(
+              key: const Key('cash-start-date'),
+              today: _today,
+              value: _startsOn,
+              onChanged: (day) => setState(() => _startsOn = day),
+            ),
+          ],
           if (_error != null) ...[
             const SizedBox(height: AppSpacing.sm),
             Text(

@@ -41,7 +41,13 @@ class MemberNotifier:
         self.timeout_seconds = timeout_seconds
 
     async def welcome(
-        self, *, gym: Gym, member: GymMember, membership: GymMembership, code: str
+        self,
+        *,
+        gym: Gym,
+        member: GymMember,
+        membership: GymMembership,
+        code: str,
+        starts_on: date | None = None,
     ) -> MemberMessageStatus | None:
         return await self._send(
             gym=gym,
@@ -53,6 +59,7 @@ class MemberNotifier:
                 gym_phone=gym.phone_number,
                 code=code,
                 paid_until=membership.ends_on,
+                starts_on=starts_on,
             ),
         )
 
@@ -63,6 +70,7 @@ class MemberNotifier:
         member: GymMember,
         membership: GymMembership,
         paid_until: date,
+        starts_on: date | None = None,
     ) -> MemberMessageStatus | None:
         return await self._send(
             gym=gym,
@@ -75,6 +83,7 @@ class MemberNotifier:
                 amount=membership.amount,
                 currency=membership.currency,
                 paid_until=paid_until,
+                starts_on=starts_on,
             ),
         )
 

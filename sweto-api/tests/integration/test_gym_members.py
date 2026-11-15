@@ -264,7 +264,8 @@ async def test_a_start_date_can_be_backdated_for_members_who_paid_before(
     added = await add_member(owner, gym_id)
     monthly = plans["Monthly"]
 
-    for starts_on in ["2026-11-15", "2026-08-15"]:  # future; more than 90 days back
+    # More than 30 days ahead; more than 90 days back.
+    for starts_on in ["2026-12-15", "2026-08-15"]:
         response = await pay_cash(
             owner, gym_id, added["id"], plan_id=monthly, starts_on=starts_on
         )

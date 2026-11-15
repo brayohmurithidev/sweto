@@ -152,7 +152,13 @@ class CheckInService:
             else CheckInMemberData(
                 id=member.id,
                 full_name=member.full_name,
-                standing=standing_for(paid_until, today),
+                standing=standing_for(
+                    paid_until,
+                    today,
+                    membership.starts_on
+                    if result == CheckInResult.NOT_STARTED and membership is not None
+                    else None,
+                ),
                 paid_until=paid_until,
             ),
             membership=None

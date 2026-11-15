@@ -59,9 +59,10 @@ class RecordCashPaymentRequest(BaseModel):
         default=None,
         description=(
             "First day of the membership, for a member who paid before being "
-            "added. Only for a member with no current membership; not in the "
-            "future and at most 90 days back. Without it, the membership "
-            "starts the day after the current one ends, or today."
+            "added, or a later day for one who pays now and starts later. "
+            "Only for a member with no current membership; at most 90 days "
+            "back and 30 days ahead. Without it, the membership starts the "
+            "day after the current one ends, or today."
         ),
     )
 
@@ -97,6 +98,11 @@ class GymMemberData(BaseModel):
     status: GymMemberStatus
     standing: MemberStanding
     paid_until: date | None
+    starts_on: date | None = Field(
+        default=None,
+        description="First day of the period covering today, or of the next "
+        "paid one when it hasn't started yet (standing upcoming).",
+    )
     has_check_in_code: bool
     sms_enabled: bool
     sms_consent_recorded_at: datetime | None

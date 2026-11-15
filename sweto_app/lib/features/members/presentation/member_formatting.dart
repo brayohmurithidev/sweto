@@ -69,6 +69,7 @@ String standingLabel(GymMember member, {bool compact = false}) {
     MemberStanding.expiring => 'Ends ${formatDay(until!)}',
     MemberStanding.expired => 'Expired ${formatDay(until!)}',
     MemberStanding.noMembership => 'Never paid',
+    MemberStanding.upcoming => 'Starts ${formatDay(member.startsOn ?? until!)}',
   };
 }
 
@@ -77,6 +78,7 @@ Color standingColor(MemberStanding standing) => switch (standing) {
   MemberStanding.expiring => AppColors.warning,
   MemberStanding.expired => AppColors.error,
   MemberStanding.noMembership => AppColors.textMuted,
+  MemberStanding.upcoming => AppColors.primary,
 };
 
 class StandingBadge extends StatelessWidget {
