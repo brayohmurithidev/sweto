@@ -1,9 +1,12 @@
 from datetime import UTC, date, datetime
 from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.models import User
+from app.modules.gyms.enums import GymStaffStatus
+from app.modules.gyms.models import GymStaff
 from app.modules.profiles.enums import (
     AccountRole,
     OnboardingStatus,
@@ -122,6 +125,17 @@ class ProfileService:
             (item.role for item in active_roles if item.is_default),
             None,
         )
+
+        # Staff added by a gym owner skip account setup and go to that gym.
+        staff_step = await self._staff_step(user_id)
+        if staff_step is not None:
+            return OnboardingStatusData(
+                roles=[item.role for item in active_roles],
+                default_role=default_role,
+                onboarding_status=OnboardingStatus.COMPLETED,
+                onboarding_completed=True,
+                next_step=staff_step,
+            )
 
         if profile is None:
             return OnboardingStatusData(
@@ -278,6 +292,25 @@ class ProfileService:
                 profile.country_code,
             ]
         )
+
+    async def _staff_step(self, user_id: UUID) -> str | None:
+        """'gym_staff' for someone who works at a gym they do not own,
+        'staff_suspended' while their access is suspended, else None."""
+
+        row = (
+            await self.session.execute(
+                select(GymStaff.status).where(
+                    GymStaff.user_id == user_id,
+                    GymStaff.is_primary_owner.is_(False),
+                    GymStaff.status.in_(
+                        [GymStaffStatus.ACTIVE, GymStaffStatus.SUSPENDED]
+                    ),
+                )
+            )
+        ).first()
+        if row is None:
+            return None
+        return "gym_staff" if row[0] == GymStaffStatus.ACTIVE else "staff_suspended"
 
     @staticmethod
     def _resolve_next_step(

@@ -136,7 +136,7 @@ async def get_current_gym(
     session: DatabaseSession,
     settings: ApplicationSettings,
 ) -> APIResponse[GymData]:
-    """Return the current primary-owner gym."""
+    """Return the gym this account owns or works at."""
 
     service = GymService(
         session=session,

@@ -88,3 +88,19 @@ class GymVerificationRejectionReasonRequiredError(GymError):
 
 class GymVerificationAccessDeniedError(GymError):
     """Raised when a user cannot access a gym verification submission."""
+
+
+class GymStaffError(GymError):
+    """Base error for adding or changing gym staff."""
+
+
+class GymStaffNotFoundError(GymStaffError):
+    """The staff member is not part of this gym."""
+
+
+class GymStaffConflictError(GymStaffError):
+    """The phone number already works at a gym, or is on this gym's staff."""
+
+
+class GymStaffChangeNotAllowedError(GymStaffError):
+    """The change would affect the gym's owner or the person making it."""

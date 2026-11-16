@@ -48,6 +48,10 @@ from app.modules.gyms.exceptions import (
     GymPhotoUploadInvalidError,
     GymProfileIncompleteError,
     GymSlugConflictError,
+    GymStaffChangeNotAllowedError,
+    GymStaffConflictError,
+    GymStaffError,
+    GymStaffNotFoundError,
     GymVerificationAccessDeniedError,
     GymVerificationAlreadyApprovedError,
     GymVerificationAlreadyPendingError,
@@ -740,3 +744,24 @@ async def amenity_not_found_handler(
         code="INVALID_AMENITIES",
         message=str(exception),
     )
+
+
+_STAFF_ERRORS: dict[type[Exception], tuple[int, str]] = {
+    GymStaffNotFoundError: (status.HTTP_404_NOT_FOUND, "STAFF_NOT_FOUND"),
+    GymStaffConflictError: (status.HTTP_409_CONFLICT, "STAFF_PHONE_TAKEN"),
+    GymStaffChangeNotAllowedError: (
+        status.HTTP_422_UNPROCESSABLE_CONTENT,
+        "STAFF_CHANGE_NOT_ALLOWED",
+    ),
+}
+
+
+async def gym_staff_error_handler(_: Request, exception: Exception) -> JSONResponse:
+    """Return the client error for adding or changing gym staff."""
+
+    if not isinstance(exception, GymStaffError):
+        raise exception
+    status_code, code = _STAFF_ERRORS.get(
+        type(exception), (status.HTTP_400_BAD_REQUEST, "STAFF_ERROR")
+    )
+    return error_response(status_code=status_code, code=code, message=str(exception))

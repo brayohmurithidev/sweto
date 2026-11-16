@@ -128,7 +128,7 @@ async def test_an_empty_gym_shows_zeros(
     assert data["recent_activity"] == []
 
 
-async def test_only_this_gyms_owner_or_manager_sees_it(
+async def test_staff_see_it_without_revenue_and_other_gyms_do_not(
     api: IntegrationAPI, storage: FakeStorage
 ) -> None:
     owner = await sign_in_owner(api)
@@ -143,7 +143,12 @@ async def test_only_this_gyms_owner_or_manager_sees_it(
         gym_id=gym_id,
     )
 
-    for caller in (other, receptionist):
-        response = await caller.call("GET", f"/gyms/{gym_id}/dashboard")
-        assert response.status_code == 403
+    response = await other.call("GET", f"/gyms/{gym_id}/dashboard")
+    assert response.status_code == 403
+    # The front desk sees today's numbers, but not the gym's money.
+    response = await receptionist.call("GET", f"/gyms/{gym_id}/dashboard")
+    assert response.status_code == 200
+    assert response.json()["data"]["revenue"] is None
+    response = await owner.call("GET", f"/gyms/{gym_id}/dashboard")
+    assert response.json()["data"]["revenue"] is not None
     assert (await api.client.get(f"/api/v1/gyms/{gym_id}/dashboard")).status_code == 401

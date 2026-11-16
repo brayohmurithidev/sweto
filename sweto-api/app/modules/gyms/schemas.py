@@ -1,5 +1,6 @@
 from datetime import datetime, time
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
@@ -8,6 +9,8 @@ from app.modules.gyms.enums import (
     DayOfWeek,
     GymBusinessType,
     GymOnboardingStep,
+    GymStaffRole,
+    GymStaffStatus,
     GymStatus,
     GymVerificationDecision,
     GymVerificationDocumentType,
@@ -800,3 +803,49 @@ class GymVerificationListData(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class GymStaffAccessData(BaseModel):
+    """What the signed-in person may do at this gym."""
+
+    gym_id: UUID
+    staff_id: UUID
+    role: GymStaffRole
+    is_primary_owner: bool
+    permissions: list[str] = Field(
+        description="Permission names, such as view_finance or manage_staff."
+    )
+
+
+class GymStaffData(BaseModel):
+    id: UUID
+    user_id: UUID
+    full_name: str | None
+    phone_number: str | None
+    role: GymStaffRole
+    status: GymStaffStatus
+    is_primary_owner: bool
+    has_signed_in: bool = Field(
+        description="False until they first sign in; show them as invited."
+    )
+    added_at: datetime
+
+
+class GymStaffListData(BaseModel):
+    staff: list[GymStaffData]
+
+
+class AddGymStaffRequest(BaseModel):
+    full_name: str = Field(min_length=2, max_length=120)
+    phone_number: str = Field(min_length=7, max_length=20)
+    role: GymStaffRole
+
+
+class AddGymStaffData(BaseModel):
+    staff: GymStaffData
+    invite_sms: Literal["sent", "failed"]
+
+
+class UpdateGymStaffRequest(BaseModel):
+    role: GymStaffRole | None = None
+    status: Literal["active", "suspended"] | None = None

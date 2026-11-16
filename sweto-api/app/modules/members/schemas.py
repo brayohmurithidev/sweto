@@ -265,7 +265,10 @@ class DashboardData(BaseModel):
     active_members: int
     expiring_members: int
     check_ins_today: int
-    revenue: RevenueSummary
+    revenue: RevenueSummary | None = Field(
+        default=None,
+        description="Null when the caller's role may not see the gym's finances.",
+    )
     recent_activity: list[ActivityItem]
 
 
