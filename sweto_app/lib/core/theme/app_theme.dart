@@ -57,6 +57,17 @@ class AppTheme {
           textStyle: AppTextStyles.labelMedium,
         ),
       ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: AppColors.surfaceElevated,
+        elevation: 8,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        textStyle: AppTextStyles.bodyMedium.copyWith(
+          color: AppColors.textPrimary,
+        ),
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surface,

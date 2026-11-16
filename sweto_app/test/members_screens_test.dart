@@ -534,11 +534,14 @@ void main() {
       await tester.pumpAndSettle();
 
       // Only active plans are offered; the first is preselected.
+      expect(find.text('Monthly · KES 5,000'), findsOneWidget);
       await tester.tap(find.byKey(const Key('cash-plan-field')));
       await tester.pumpAndSettle();
-      expect(find.text('Annual · KES 50000'), findsNothing);
-      await tester.tap(find.text('Weekly · KES 1500').last);
+      expect(find.text('Choose a plan'), findsOneWidget);
+      expect(find.text('Annual'), findsNothing);
+      await tester.tap(find.text('Weekly'));
       await tester.pumpAndSettle();
+      expect(find.text('Weekly · KES 1,500'), findsOneWidget);
       expect(
         tester
             .widget<TextField>(find.byKey(const Key('cash-amount-field')))
