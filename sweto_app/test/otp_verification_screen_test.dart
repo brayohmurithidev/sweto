@@ -4,6 +4,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sweto_app/features/auth/data/otp_sms_reader.dart';
 import 'package:sweto_app/features/auth/domain/entities/auth_entities.dart';
 import 'package:sweto_app/core/network/api_exception.dart';
 import 'package:sweto_app/features/auth/domain/repositories/auth_repository.dart';
@@ -13,6 +14,82 @@ import 'package:sweto_app/features/auth/presentation/otp_verification_screen.dar
 import 'support/fake_otp_delivery_repository.dart';
 
 void main() {
+  late _FakeSmsReader whatsAppReader;
+  setUp(() => whatsAppReader = _FakeSmsReader());
+
+  Future<_AuthFake> pumpSmsOtp(
+    WidgetTester tester,
+    _FakeSmsReader reader,
+  ) async {
+    final auth = _AuthFake();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          authRepositoryProvider.overrideWithValue(auth),
+          otpDeliveryRepositoryProvider.overrideWithValue(
+            FakeOtpDeliveryRepository(),
+          ),
+          otpSmsReaderProvider.overrideWithValue(reader),
+        ],
+        child: MaterialApp(
+          home: OtpVerificationScreen(
+            challenge: OtpChallenge(
+              challengeId: 'sms-challenge',
+              phoneNumber: '+254712345678',
+              expiresAt: DateTime.now().add(const Duration(minutes: 5)),
+              resendAvailableAt: DateTime.now().add(const Duration(minutes: 1)),
+            ),
+          ),
+        ),
+      ),
+    );
+    return auth;
+  }
+
+  testWidgets('a code read from the SMS is filled in and verified', (
+    tester,
+  ) async {
+    final reader = _FakeSmsReader();
+    final auth = await pumpSmsOtp(tester, reader);
+    expect(reader.waits, 1);
+    expect(auth.verifiedChallengeId, isNull);
+
+    reader.deliver('482913');
+    await tester.pump();
+
+    final input = tester.widget<TextField>(
+      find.byKey(const Key('otp-hidden-input')),
+    );
+    expect(input.controller!.text, '482913');
+    expect(auth.verifiedChallengeId, 'sms-challenge');
+    expect(auth.verifiedCode, '482913');
+  });
+
+  testWidgets('a declined or missing SMS leaves the code to be typed', (
+    tester,
+  ) async {
+    final reader = _FakeSmsReader();
+    final auth = await pumpSmsOtp(tester, reader);
+
+    reader.deliver(null);
+    await tester.pump();
+
+    expect(auth.verifiedChallengeId, isNull);
+    final input = tester.widget<TextField>(
+      find.byKey(const Key('otp-hidden-input')),
+    );
+    expect(input.controller!.text, isEmpty);
+  });
+
+  testWidgets('leaving the screen stops waiting for the SMS', (tester) async {
+    final reader = _FakeSmsReader();
+    await pumpSmsOtp(tester, reader);
+
+    await tester.pumpWidget(const SizedBox());
+
+    expect(reader.stops, 1);
+  });
+
   Future<FakeOtpDeliveryRepository> pumpWhatsAppOtp(
     WidgetTester tester,
     OtpDeliveryStatus status,
@@ -23,6 +100,7 @@ void main() {
         overrides: [
           authRepositoryProvider.overrideWithValue(_AuthFake()),
           otpDeliveryRepositoryProvider.overrideWithValue(delivery),
+          otpSmsReaderProvider.overrideWithValue(whatsAppReader),
         ],
         child: MaterialApp(
           home: OtpVerificationScreen(
@@ -39,6 +117,12 @@ void main() {
     );
     return delivery;
   }
+
+  testWidgets('a WhatsApp code does not wait for an SMS', (tester) async {
+    await pumpWhatsAppOtp(tester, OtpDeliveryStatus.delivered);
+    expect(whatsAppReader.waits, 0);
+    await tester.pump(const Duration(seconds: 4));
+  });
 
   testWidgets('a failed WhatsApp delivery is explained and resend opens', (
     tester,
@@ -263,6 +347,7 @@ void main() {
 class _AuthFake implements AuthRepository {
   String? requestedPhone;
   String? verifiedChallengeId;
+  String? verifiedCode;
   bool throwInvalidOtp = false;
   @override
   Future<void> clearTokens() async {}
@@ -304,6 +389,7 @@ class _AuthFake implements AuthRepository {
     required String code,
   }) async {
     verifiedChallengeId = challengeId;
+    verifiedCode = code;
     if (throwInvalidOtp) {
       throw DioException(
         requestOptions: RequestOptions(path: '/api/v1/auth/verify-otp'),
@@ -315,5 +401,26 @@ class _AuthFake implements AuthRepository {
       );
     }
     return Completer<AuthTokens>().future;
+  }
+}
+
+class _FakeSmsReader implements OtpSmsReader {
+  int waits = 0;
+  int stops = 0;
+  Completer<String?>? _pending;
+
+  void deliver(String? code) => _pending?.complete(code);
+
+  @override
+  Future<String?> waitForCode() {
+    waits++;
+    return (_pending = Completer<String?>()).future;
+  }
+
+  @override
+  Future<void> stop() async {
+    stops++;
+    final pending = _pending;
+    if (pending != null && !pending.isCompleted) pending.complete(null);
   }
 }
