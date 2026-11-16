@@ -65,5 +65,15 @@ abstract interface class MembersRepository {
     required String shortcode,
     String? tillNumber,
     String? passkey,
+    String? consumerKey,
+    String? consumerSecret,
+  });
+
+  /// The gym's activity log, newest first; [byUserId] for one staff member.
+  Future<ActivityPage> getActivity(
+    String gymId, {
+    String? byUserId,
+    int limit = 30,
+    int offset = 0,
   });
 }

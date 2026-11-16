@@ -256,6 +256,19 @@ class ActivityItem(BaseModel):
     member_name: str | None
     detail: str
     ok: bool
+    by_user_id: UUID | None = Field(
+        default=None, description="The staff member who did it, when known."
+    )
+    by_name: str | None = Field(
+        default=None, description="Their name, when they have one on file."
+    )
+
+
+class ActivityPageData(BaseModel):
+    items: list[ActivityItem]
+    has_more: bool
+    limit: int
+    offset: int
 
 
 class DashboardData(BaseModel):
@@ -359,6 +372,20 @@ class SaveMpesaAccountRequest(BaseModel):
         description="Lipa na M-Pesa Online passkey from Safaricom. Required "
         "the first time; leave out to keep the saved one.",
     )
+    consumer_key: str | None = Field(
+        default=None,
+        min_length=10,
+        max_length=128,
+        description="Consumer key of the gym's own Daraja app (gone live on "
+        "this shortcode). Send with consumer_secret; leave both out to keep "
+        "the saved ones.",
+    )
+    consumer_secret: str | None = Field(
+        default=None,
+        min_length=10,
+        max_length=128,
+        description="Consumer secret of the gym's own Daraja app.",
+    )
 
     @model_validator(mode="after")
     def till_needs_number(self) -> "SaveMpesaAccountRequest":
@@ -373,5 +400,10 @@ class MpesaAccountData(BaseModel):
     shortcode: str | None = None
     till_number: str | None = None
     passkey_saved: bool = False
+    app_keys_saved: bool = Field(
+        default=False,
+        description="Whether the gym's own Daraja consumer key and secret are "
+        "saved. They are never sent back.",
+    )
     updated_at: datetime | None = None
     mode: str = Field(description="disabled, simulated, sandbox or production")

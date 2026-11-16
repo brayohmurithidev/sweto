@@ -228,21 +228,42 @@ class DioMembersRepository implements MembersRepository {
           .toList(),
       recentActivity: (d['recent_activity'] as List? ?? const [])
           .map((item) => _map(item))
-          .map(
-            (item) => ActivityItem(
-              kind: item['kind'] as String? ?? '',
-              at:
-                  DateTime.tryParse('${item['at']}')?.toLocal() ??
-                  DateTime.now(),
-              detail: item['detail'] as String? ?? '',
-              ok: item['ok'] != false,
-              memberId: item['member_id'] as String?,
-              memberName: item['member_name'] as String?,
-            ),
-          )
+          .map(_activity)
           .toList(),
     );
   }
+
+  @override
+  Future<ActivityPage> getActivity(
+    String gymId, {
+    String? byUserId,
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    final r = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.gymActivity(gymId),
+      queryParameters: {'by': ?byUserId, 'limit': limit, 'offset': offset},
+    );
+    final d = _data(r.data);
+    return ActivityPage(
+      items: (d['items'] as List? ?? const [])
+          .map(_map)
+          .map(_activity)
+          .toList(),
+      hasMore: d['has_more'] == true,
+    );
+  }
+
+  ActivityItem _activity(Map<String, dynamic> item) => ActivityItem(
+    kind: item['kind'] as String? ?? '',
+    at: DateTime.tryParse('${item['at']}')?.toLocal() ?? DateTime.now(),
+    detail: item['detail'] as String? ?? '',
+    ok: item['ok'] != false,
+    memberId: item['member_id'] as String?,
+    memberName: item['member_name'] as String?,
+    byUserId: item['by_user_id'] as String?,
+    byName: item['by_name'] as String?,
+  );
 
   @override
   Future<FinanceSummary> getFinance(String gymId, {DateTime? month}) async {
@@ -354,6 +375,8 @@ class DioMembersRepository implements MembersRepository {
     required String shortcode,
     String? tillNumber,
     String? passkey,
+    String? consumerKey,
+    String? consumerSecret,
   }) async {
     final r = await _dio.put<Map<String, dynamic>>(
       ApiEndpoints.gymMpesaAccount(gymId),
@@ -362,6 +385,8 @@ class DioMembersRepository implements MembersRepository {
         'shortcode': shortcode,
         if (isTill) 'till_number': tillNumber,
         'passkey': ?passkey,
+        'consumer_key': ?consumerKey,
+        'consumer_secret': ?consumerSecret,
       },
     );
     return _till(_data(r.data));
@@ -374,6 +399,7 @@ class DioMembersRepository implements MembersRepository {
     shortcode: d['shortcode'] as String?,
     tillNumber: d['till_number'] as String?,
     passkeySaved: d['passkey_saved'] == true,
+    appKeysSaved: d['app_keys_saved'] == true,
   );
 
   MemberDetail _detail(Map<String, dynamic> d) => MemberDetail(

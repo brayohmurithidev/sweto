@@ -16,6 +16,7 @@ import 'package:sweto_app/features/onboarding/presentation/onboarding_screen.dar
 import 'package:sweto_app/features/splash/presentation/splash_screen.dart';
 import 'package:sweto_app/features/gym_owner/presentation/gym_owner_screens.dart';
 import 'package:sweto_app/features/gym_owner/presentation/gym_owner_dashboard.dart';
+import 'package:sweto_app/features/members/presentation/activity_screen.dart';
 import 'package:sweto_app/features/members/presentation/add_member_screen.dart';
 import 'package:sweto_app/features/members/presentation/check_in_screen.dart';
 import 'package:sweto_app/features/members/presentation/member_detail_screen.dart';
@@ -183,6 +184,15 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         name: AppRoutes.mpesaTillName,
         builder: (context, state) =>
             MpesaTillScreen(gymId: state.pathParameters['gymId']!),
+      ),
+      GoRoute(
+        path: AppRoutes.activityPath,
+        name: AppRoutes.activityName,
+        builder: (context, state) => ActivityScreen(
+          gymId: state.pathParameters['gymId']!,
+          byUserId: state.uri.queryParameters['by'],
+          byName: state.uri.queryParameters['name'],
+        ),
       ),
       GoRoute(
         path: AppRoutes.staffPath,

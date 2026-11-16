@@ -39,6 +39,10 @@ class MpesaAccount:
     passkey: str
     transaction_type: str
     party_b: str
+    # The gym's own Daraja app. None: the gateway's default app (sandbox and
+    # testing only).
+    consumer_key: str | None = None
+    consumer_secret: str | None = None
 
     def __repr__(self) -> str:  # never print the passkey
         return f"MpesaAccount(shortcode={self.shortcode!r}, party_b={self.party_b!r})"

@@ -19,6 +19,7 @@ class GymPermission(StrEnum):
     MANAGE_PAYMENT_SETTINGS = "manage_payment_settings"
     MANAGE_STAFF = "manage_staff"
     VIEW_FINANCE = "view_finance"
+    VIEW_ACTIVITY = "view_activity"
     VIEW_MEMBERS = "view_members"
     EDIT_MEMBERS = "edit_members"
     ARCHIVE_MEMBERS = "archive_members"
@@ -41,6 +42,8 @@ _FRONT_DESK = frozenset(
 _MANAGER = _FRONT_DESK | {
     GymPermission.EDIT_GYM,
     GymPermission.VIEW_FINANCE,
+    # Who did what: for whoever answers for the till and the door.
+    GymPermission.VIEW_ACTIVITY,
     GymPermission.ARCHIVE_MEMBERS,
 }
 
@@ -75,6 +78,9 @@ DENIED_MESSAGES: dict[GymPermission, str] = {
     GymPermission.MANAGE_STAFF: "Only the gym's owner can manage staff.",
     GymPermission.VIEW_FINANCE: (
         "Only the gym's owner or a manager can see the gym's finances."
+    ),
+    GymPermission.VIEW_ACTIVITY: (
+        "Only the gym's owner or a manager can see who did what."
     ),
     GymPermission.VIEW_MEMBERS: "You do not have access to this gym's members.",
     GymPermission.EDIT_MEMBERS: "Your role cannot add or change members.",

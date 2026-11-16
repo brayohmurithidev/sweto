@@ -44,6 +44,25 @@ DioException fakeApiError(String message) => DioException(
 );
 
 class FakeMembers implements MembersRepository {
+  final activity = <ActivityItem>[];
+  final activityCalls = <(String?, int)>[];
+
+  @override
+  Future<ActivityPage> getActivity(
+    String gymId, {
+    String? byUserId,
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    activityCalls.add((byUserId, offset));
+    final mine = [
+      for (final item in activity)
+        if (byUserId == null || item.byUserId == byUserId) item,
+    ];
+    final page = mine.skip(offset).take(limit).toList();
+    return ActivityPage(items: page, hasMore: offset + limit < mine.length);
+  }
+
   final members = <GymMember>[];
 
   /// Check-in QRs handed to the share sheet: image, file name, text.
@@ -209,6 +228,8 @@ class FakeMembers implements MembersRepository {
     required String shortcode,
     String? tillNumber,
     String? passkey,
+    String? consumerKey,
+    String? consumerSecret,
   }) async {
     if (tillError != null) throw tillError!;
     tillSaves.add({
@@ -216,6 +237,8 @@ class FakeMembers implements MembersRepository {
       'shortcode': shortcode,
       'tillNumber': tillNumber,
       'passkey': passkey,
+      'consumerKey': consumerKey,
+      'consumerSecret': consumerSecret,
     });
     return till = MpesaTill(
       configured: true,
@@ -224,6 +247,7 @@ class FakeMembers implements MembersRepository {
       shortcode: shortcode,
       tillNumber: tillNumber,
       passkeySaved: true,
+      appKeysSaved: consumerKey != null || till.appKeysSaved,
     );
   }
 

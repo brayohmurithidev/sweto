@@ -80,12 +80,21 @@ class DioStaffRepository implements StaffRepository {
 
   StaffMember _staff(Map<String, dynamic> d) => StaffMember(
     id: '${d['id']}',
+    userId: d['user_id'] as String?,
+    today: d['today'] is Map<String, dynamic> ? _day(_map(d['today'])) : null,
     fullName: d['full_name'] as String?,
     phoneNumber: d['phone_number'] as String?,
     role: StaffRole.fromApi(d['role']),
     status: d['status'] as String? ?? 'active',
     isPrimaryOwner: d['is_primary_owner'] == true,
     hasSignedIn: d['has_signed_in'] == true,
+  );
+
+  StaffDay _day(Map<String, dynamic> d) => StaffDay(
+    payments: (d['payments'] as num?)?.toInt() ?? 0,
+    cash: double.tryParse('${d['cash']}') ?? 0,
+    mpesa: double.tryParse('${d['mpesa']}') ?? 0,
+    checkIns: (d['check_ins'] as num?)?.toInt() ?? 0,
   );
 
   Map<String, dynamic> _data(Map<String, dynamic>? body) => _map(body?['data']);

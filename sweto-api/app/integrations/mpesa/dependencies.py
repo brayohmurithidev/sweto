@@ -13,11 +13,13 @@ def build_mpesa_gateway(settings: Settings) -> MpesaGateway | None:
         return None
     if settings.mpesa_mode == "simulated":
         return SimulatedMpesaGateway()
-    assert settings.mpesa_consumer_key and settings.mpesa_consumer_secret
+    # SWETO's own Daraja app: used only for accounts without their own keys
+    # (sandbox and testing). In production every gym brings its own app.
+    key, secret = settings.mpesa_consumer_key, settings.mpesa_consumer_secret
     return DarajaGateway(
         base_url=BASE_URLS[settings.mpesa_mode],
-        consumer_key=settings.mpesa_consumer_key.get_secret_value(),
-        consumer_secret=settings.mpesa_consumer_secret.get_secret_value(),
+        consumer_key=key.get_secret_value() if key else None,
+        consumer_secret=secret.get_secret_value() if secret else None,
         timeout_seconds=settings.mpesa_timeout_seconds,
     )
 
