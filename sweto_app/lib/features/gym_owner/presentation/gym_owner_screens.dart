@@ -20,6 +20,7 @@ import 'package:sweto_app/features/auth/presentation/auth_providers.dart';
 import 'package:sweto_app/features/auth/presentation/session_controller.dart';
 import 'package:sweto_app/core/phone/phone_country.dart';
 import 'package:sweto_app/core/phone/phone_number.dart';
+import 'package:sweto_app/shared/widgets/sweto_option_sheet.dart';
 import 'package:sweto_app/shared/widgets/phone_number_field.dart';
 import 'package:sweto_app/features/gym_owner/domain/gym_owner_entities.dart';
 import 'package:sweto_app/features/gym_owner/domain/gym_location_service.dart';
@@ -2038,12 +2039,18 @@ class _GymBusinessDetailsScreenState
   }
 
   Future<void> _chooseType() async {
-    final result = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: AppColors.surfaceElevated,
-      isScrollControlled: true,
-      builder: (context) =>
-          SafeArea(child: _BusinessTypeSheet(selected: _type)),
+    final result = await showSwetoOptionSheet<String>(
+      context,
+      title: 'Business type',
+      selected: _type,
+      options: [
+        for (final type in _types)
+          SwetoOption(
+            key: Key('business-type-${type.key}'),
+            value: type.key,
+            label: type.value,
+          ),
+      ],
     );
     if (result != null && mounted) setState(() => _type = result);
   }
@@ -2300,72 +2307,6 @@ class _GymBusinessDetailsScreenState
       ],
     ),
   );
-}
-
-class _BusinessTypeSheet extends StatefulWidget {
-  const _BusinessTypeSheet({required this.selected});
-  final String? selected;
-  @override
-  State<_BusinessTypeSheet> createState() => _BusinessTypeSheetState();
-}
-
-class _BusinessTypeSheetState extends State<_BusinessTypeSheet> {
-  final _search = TextEditingController();
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final query = _search.text.toLowerCase();
-    final values = GymBusinessDetailsScreenStateTypes.values.where(
-      (e) => e.value.toLowerCase().contains(query),
-    );
-    return Padding(
-      padding: const EdgeInsets.all(AppSpacing.md),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _search,
-            onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.search),
-              hintText: 'Search business types',
-            ),
-          ),
-          Flexible(
-            child: ListView(
-              shrinkWrap: true,
-              children: values
-                  .map(
-                    (e) => ListTile(
-                      title: Text(e.value),
-                      trailing: e.key == widget.selected
-                          ? const Icon(Icons.check, color: AppColors.primary)
-                          : null,
-                      onTap: () => Navigator.pop(context, e.key),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class GymBusinessDetailsScreenStateTypes {
-  static const values = <MapEntry<String, String>>[
-    MapEntry('sole_proprietorship', 'Sole Proprietorship'),
-    MapEntry('partnership', 'Partnership'),
-    MapEntry('limited_company', 'Limited Company'),
-    MapEntry('non_profit', 'Non-profit'),
-    MapEntry('other', 'Other'),
-  ];
 }
 
 class GymLocationScreen extends ConsumerStatefulWidget {
@@ -3115,57 +3056,25 @@ class _GymVerificationSetupScreenState
 
   Future<void> _chooseDocumentType() async {
     if (_data == null || _supportedDocumentTypes.every(_isAdded)) return;
-    final result = await showModalBottomSheet<String>(
-      context: context,
-      backgroundColor: AppColors.surfaceElevated,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(18),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Select document type',
-                    style: AppTextStyles.headingMedium,
-                  ),
-                ),
-              ),
-              ..._supportedDocumentTypes.map(
-                (type) => ListTile(
-                  enabled: !_isAdded(type),
-                  leading: Icon(
-                    Icons.description_outlined,
-                    color: _isAdded(type)
-                        ? AppColors.textMuted
-                        : AppColors.primary,
-                  ),
-                  title: Text(_label(type)),
-                  subtitle: Text(
-                    _isAdded(type)
-                        ? 'Added'
-                        : (_data!.requiredTypes.contains(type)
-                              ? 'Required'
-                              : 'Optional'),
-                  ),
-                  trailing: _isAdded(type)
-                      ? const Icon(Icons.check, color: AppColors.secondary)
-                      : null,
-                  onTap: _isAdded(type)
-                      ? null
-                      : () => Navigator.pop(context, type),
-                ),
-              ),
-              const SizedBox(height: 8),
-            ],
+    final result = await showSwetoOptionSheet<String>(
+      context,
+      title: 'Select document type',
+      selected: _selectedType,
+      options: [
+        for (final type in _supportedDocumentTypes)
+          SwetoOption(
+            key: Key('document-type-$type'),
+            value: type,
+            label: _label(type),
+            icon: Icons.description_outlined,
+            enabled: !_isAdded(type),
+            detail: _isAdded(type)
+                ? 'Added'
+                : (_data!.requiredTypes.contains(type)
+                      ? 'Required'
+                      : 'Optional'),
           ),
-        ),
-      ),
+      ],
     );
     if (result != null && mounted) {
       setState(() {

@@ -5,6 +5,7 @@ import 'package:sweto_app/core/theme/radius.dart';
 import 'package:sweto_app/core/theme/spacing.dart';
 import 'package:sweto_app/core/theme/text_styles.dart';
 import 'package:sweto_app/features/gym_owner/domain/gym_owner_entities.dart';
+import 'package:sweto_app/shared/widgets/sweto_option_sheet.dart';
 
 /// Plan picker and amount (prefilled from the plan) for a cash payment.
 class CashPaymentForm extends StatefulWidget {
@@ -66,30 +67,12 @@ class _CashPaymentFormState extends State<CashPaymentForm> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DropdownButtonFormField<GymPricingPlan>(
+        SwetoSelectField(
           key: const Key('cash-plan-field'),
-          initialValue: _plan,
-          isExpanded: true,
+          label: 'Plan',
+          value: _plan == null ? null : _planLabel(_plan!),
           decoration: _decoration('Plan'),
-          dropdownColor: AppColors.surfaceElevated,
-          items: [
-            for (final plan in widget.plans)
-              DropdownMenuItem(
-                value: plan,
-                child: Text(
-                  '${plan.name} · KES ${plan.amount}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-          ],
-          onChanged: (plan) {
-            setState(() {
-              _plan = plan;
-              _amount.text = plan == null ? '' : '${plan.amount}';
-            });
-            _notify();
-          },
+          onTap: _choosePlan,
         ),
         const SizedBox(height: AppSpacing.sm),
         TextField(
@@ -103,6 +86,32 @@ class _CashPaymentFormState extends State<CashPaymentForm> {
       ],
     );
   }
+
+  Future<void> _choosePlan() async {
+    final plan = await showSwetoOptionSheet<GymPricingPlan>(
+      context,
+      title: 'Choose a plan',
+      selected: _plan,
+      options: [
+        for (final plan in widget.plans)
+          SwetoOption(
+            key: Key('cash-plan-option-${plan.id}'),
+            value: plan,
+            label: plan.name,
+            trailing: 'KES ${formatKesAmount(plan.amount)}',
+          ),
+      ],
+    );
+    if (plan == null || !mounted) return;
+    setState(() {
+      _plan = plan;
+      _amount.text = '${plan.amount}';
+    });
+    _notify();
+  }
+
+  static String _planLabel(GymPricingPlan plan) =>
+      '${plan.name} · KES ${formatKesAmount(plan.amount)}';
 
   InputDecoration _decoration(String label) => InputDecoration(
     labelText: label,
@@ -120,3 +129,14 @@ List<GymPricingPlan> sellablePlans(GymPricing pricing) => [
   for (final plan in pricing.membershipPlans)
     if (plan.isActive && plan.id != null) plan,
 ];
+
+/// 5000 -> "5,000".
+String formatKesAmount(int amount) {
+  final digits = amount.abs().toString();
+  final out = StringBuffer(amount < 0 ? '-' : '');
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) out.write(',');
+    out.write(digits[i]);
+  }
+  return out.toString();
+}
