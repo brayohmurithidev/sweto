@@ -16,8 +16,8 @@ from tests.integration.test_mpesa import FakeGateway, member_with_plan, request
 
 pytestmark = pytest.mark.usefixtures("pinned_clock")
 PASSKEY = "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919"
-CONSUMER_KEY = "gymOwnDarajaAppConsumerKey0123"
-CONSUMER_SECRET = "gymOwnDarajaAppConsumerSecret456"
+CONSUMER_KEY = "fake-consumer-key-xxxxxxxxxx"
+CONSUMER_SECRET = "fake-consumer-secret-xxxxxxxxxx"
 TILL = {
     "account_type": "till",
     "shortcode": "7654321",

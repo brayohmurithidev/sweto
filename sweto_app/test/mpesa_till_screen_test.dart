@@ -132,7 +132,7 @@ void main() {
       findsOneWidget,
     );
 
-    await _enter(tester, 'till-consumer-key', 'gymOwnAppKey0123456');
+    await _enter(tester, 'till-consumer-key', 'fake-key-xxxxxxxxxx');
     await _tapSave(tester);
     await tester.pump();
     expect(
@@ -141,7 +141,7 @@ void main() {
     );
     expect(repo.tillSaves, isEmpty);
 
-    await _enter(tester, 'till-consumer-secret', 'gymOwnAppSecret98765');
+    await _enter(tester, 'till-consumer-secret', 'fake-secret-xxxxxxxxxx');
     expect(
       tester
           .widget<TextField>(find.byKey(const Key('till-consumer-secret')))
@@ -151,8 +151,8 @@ void main() {
     await _tapSave(tester);
     await tester.pump();
 
-    expect(repo.tillSaves.single['consumerKey'], 'gymOwnAppKey0123456');
-    expect(repo.tillSaves.single['consumerSecret'], 'gymOwnAppSecret98765');
+    expect(repo.tillSaves.single['consumerKey'], 'fake-key-xxxxxxxxxx');
+    expect(repo.tillSaves.single['consumerSecret'], 'fake-secret-xxxxxxxxxx');
     expect(find.text('Consumer key (saved)'), findsOneWidget);
   });
 
