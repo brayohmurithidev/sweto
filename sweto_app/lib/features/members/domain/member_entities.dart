@@ -451,3 +451,11 @@ class FinanceTransactionPage {
   final List<FinanceTransaction> transactions;
   final int total;
 }
+
+/// A file the API made for the gym's own records, ready to share.
+class ExportFile {
+  const ExportFile({required this.fileName, required this.bytes});
+
+  final String fileName;
+  final List<int> bytes;
+}

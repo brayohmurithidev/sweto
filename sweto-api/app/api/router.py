@@ -14,6 +14,7 @@ from app.modules.gyms.router import router as gym_router
 from app.modules.gyms.staff_router import router as gym_staff_router
 from app.modules.members.check_in_router import router as check_in_router
 from app.modules.members.dashboard_router import router as dashboard_router
+from app.modules.members.exports_router import router as exports_router
 from app.modules.members.finance_router import router as finance_router
 from app.modules.members.payments_router import (
     callback_router as mpesa_callback_router,
@@ -42,6 +43,7 @@ api_router.include_router(member_router)
 api_router.include_router(check_in_router)
 api_router.include_router(dashboard_router)
 api_router.include_router(finance_router)
+api_router.include_router(exports_router)
 api_router.include_router(payments_router)
 api_router.include_router(mpesa_callback_router)
 if settings.app_environment in {"local", "development", "testing"}:

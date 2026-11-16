@@ -22,6 +22,7 @@ class GymPermission(StrEnum):
     VIEW_MEMBERS = "view_members"
     EDIT_MEMBERS = "edit_members"
     ARCHIVE_MEMBERS = "archive_members"
+    EXPORT_MEMBERS = "export_members"
     TAKE_PAYMENTS = "take_payments"
     ISSUE_CHECK_IN_CODES = "issue_check_in_codes"
     CHECK_IN = "check_in"
@@ -42,6 +43,9 @@ _MANAGER = _FRONT_DESK | {
     GymPermission.EDIT_GYM,
     GymPermission.VIEW_FINANCE,
     GymPermission.ARCHIVE_MEMBERS,
+    # A file of every member's phone number leaves the app: keep it to the
+    # people who run the gym.
+    GymPermission.EXPORT_MEMBERS,
 }
 
 ROLE_PERMISSIONS: dict[GymStaffRole, frozenset[GymPermission]] = {
@@ -80,6 +84,9 @@ DENIED_MESSAGES: dict[GymPermission, str] = {
     GymPermission.EDIT_MEMBERS: "Your role cannot add or change members.",
     GymPermission.ARCHIVE_MEMBERS: (
         "Only the gym's owner or a manager can archive members."
+    ),
+    GymPermission.EXPORT_MEMBERS: (
+        "Only the gym's owner or a manager can export the member list."
     ),
     GymPermission.TAKE_PAYMENTS: "Your role cannot take payments.",
     GymPermission.ISSUE_CHECK_IN_CODES: "Your role cannot issue check-in codes.",

@@ -66,4 +66,10 @@ abstract interface class MembersRepository {
     String? tillNumber,
     String? passkey,
   });
+
+  /// A month's payments as a CSV file (owner and manager).
+  Future<ExportFile> exportPayments(String gymId, {DateTime? month});
+
+  /// Every member, with phone numbers, as a CSV file (owner and manager).
+  Future<ExportFile> exportMembers(String gymId);
 }

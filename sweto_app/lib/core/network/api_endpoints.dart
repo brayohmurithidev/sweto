@@ -68,6 +68,10 @@ class ApiEndpoints {
       '$gyms/$gymId/staff/$staffId';
   static String gymMpesaAccount(String gymId) => '$gyms/$gymId/mpesa-account';
   static String gymFinance(String gymId) => '$gyms/$gymId/finance';
+  static String gymExportPayments(String gymId) =>
+      '$gyms/$gymId/exports/payments.csv';
+  static String gymExportMembers(String gymId) =>
+      '$gyms/$gymId/exports/members.csv';
   static String gymFinanceTransactions(String gymId) =>
       '$gyms/$gymId/finance/transactions';
   static String gymMemberMpesaPayment(String gymId, String memberId) =>

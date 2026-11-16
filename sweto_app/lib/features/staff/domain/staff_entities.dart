@@ -36,6 +36,7 @@ enum GymPermission {
   viewMembers('view_members'),
   editMembers('edit_members'),
   archiveMembers('archive_members'),
+  exportMembers('export_members'),
   takePayments('take_payments'),
   issueCheckInCodes('issue_check_in_codes'),
   checkIn('check_in');
