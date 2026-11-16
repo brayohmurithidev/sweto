@@ -39,8 +39,9 @@ class ActivityRow extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
       ),
       subtitle: Text(
-        by == null ? item.detail : '${item.detail} · by ${firstName(by)}',
-        maxLines: 1,
+        // "by" on its own line so a long payment line never cuts the name.
+        by == null ? item.detail : '${item.detail}\nby ${firstName(by)}',
+        maxLines: by == null ? 1 : 2,
         overflow: TextOverflow.ellipsis,
         style: AppTextStyles.bodySmall,
       ),

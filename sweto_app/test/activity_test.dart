@@ -83,7 +83,7 @@ void main() {
 
     expect(find.text('Activity'), findsOneWidget);
     expect(
-      find.text('Paid KES 5,000 (cash), Monthly · by Wanjiku'),
+      find.text('Paid KES 5,000 (cash), Monthly\nby Wanjiku'),
       findsWidgets,
     );
     expect(find.text('just now'), findsOneWidget);

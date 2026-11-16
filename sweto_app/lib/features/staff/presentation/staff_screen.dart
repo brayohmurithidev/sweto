@@ -221,6 +221,15 @@ class _StaffTile extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
+                    Text(
+                      [
+                        member.role.label,
+                        if (member.phoneNumber != null &&
+                            member.displayName != member.phoneNumber)
+                          member.phoneNumber!,
+                      ].join(' · '),
+                      style: AppTextStyles.bodySmall,
+                    ),
                     if (_showsToday(member))
                       Padding(
                         padding: const EdgeInsets.only(top: 2),
@@ -232,15 +241,6 @@ class _StaffTile extends StatelessWidget {
                           ),
                         ),
                       ),
-                    Text(
-                      [
-                        member.role.label,
-                        if (member.phoneNumber != null &&
-                            member.displayName != member.phoneNumber)
-                          member.phoneNumber!,
-                      ].join(' · '),
-                      style: AppTextStyles.bodySmall,
-                    ),
                   ],
                 ),
               ),
