@@ -1,4 +1,4 @@
-package com.fazilabs.sweto_app
+package com.fazilabs.sweto
 
 import android.content.pm.PackageManager
 import io.flutter.embedding.android.FlutterActivity
