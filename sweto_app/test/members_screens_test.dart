@@ -17,6 +17,10 @@ import 'package:sweto_app/features/members/presentation/member_detail_screen.dar
 import 'package:sweto_app/features/members/presentation/check_in_code_share.dart';
 import 'package:sweto_app/features/members/presentation/members_providers.dart';
 import 'package:sweto_app/features/members/presentation/members_screen.dart';
+import 'package:sweto_app/features/members/presentation/export_share.dart';
+import 'package:sweto_app/features/staff/domain/staff_entities.dart';
+import 'package:sweto_app/features/staff/presentation/staff_providers.dart';
+import 'support/fake_staff_repository.dart';
 
 const _gymId = 'gym-1';
 final _today = DateTime(2026, 11, 14);
@@ -44,6 +48,24 @@ DioException fakeApiError(String message) => DioException(
 );
 
 class FakeMembers implements MembersRepository {
+  final exports = <String>[];
+  final sharedExports = <String>[];
+  Object? exportError;
+
+  @override
+  Future<ExportFile> exportPayments(String gymId, {DateTime? month}) async {
+    if (exportError != null) throw exportError!;
+    exports.add('payments ${month?.month ?? 'this'}');
+    return const ExportFile(fileName: 'flexfit-payments.csv', bytes: [65]);
+  }
+
+  @override
+  Future<ExportFile> exportMembers(String gymId) async {
+    if (exportError != null) throw exportError!;
+    exports.add('members');
+    return const ExportFile(fileName: 'flexfit-members.csv', bytes: [65]);
+  }
+
   final members = <GymMember>[];
 
   /// Check-in QRs handed to the share sheet: image, file name, text.
@@ -361,6 +383,7 @@ Future<void> _pump(
   WidgetTester tester,
   FakeMembers members, {
   required String location,
+  GymAccess? access,
 }) async {
   tester.view.physicalSize = const Size(1170, 2532);
   tester.view.devicePixelRatio = 3;
@@ -400,6 +423,11 @@ Future<void> _pump(
           ({required png, required fileName, required text, origin}) async =>
               members.shares.add((png, fileName, text)),
         ),
+        exportSharerProvider.overrideWithValue(
+          (file, {origin}) async => members.sharedExports.add(file.fileName),
+        ),
+        if (access != null)
+          gymAccessProvider.overrideWith(() => _FixedAccess(access)),
       ],
       child: MaterialApp.router(routerConfig: router),
     ),
@@ -407,7 +435,57 @@ Future<void> _pump(
   await tester.pumpAndSettle();
 }
 
+class _FixedAccess extends GymAccessNotifier {
+  _FixedAccess(this.access);
+  final GymAccess access;
+
+  @override
+  GymAccess build() => access;
+}
+
 void main() {
+  group('member export', () {
+    testWidgets('the owner shares the member list as a CSV', (tester) async {
+      final repo = FakeMembers();
+      await _pump(tester, repo, location: '/gyms/$_gymId/members');
+
+      await tester.tap(find.byKey(const Key('members-export')));
+      await tester.pumpAndSettle();
+
+      expect(repo.exports, ['members']);
+      expect(repo.sharedExports, ['flexfit-members.csv']);
+    });
+
+    testWidgets('the front desk has no export', (tester) async {
+      await _pump(
+        tester,
+        FakeMembers(),
+        location: '/gyms/$_gymId/members',
+        access: FakeStaffRepository.accessFor(StaffRole.receptionist),
+      );
+      expect(find.byKey(const Key('members-export')), findsNothing);
+    });
+
+    testWidgets('a failed export says why', (tester) async {
+      final repo = FakeMembers()
+        ..exportError = fakeApiError(
+          'Only the gym\'s owner or a manager can export the member list.',
+        );
+      await _pump(tester, repo, location: '/gyms/$_gymId/members');
+
+      await tester.tap(find.byKey(const Key('members-export')));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          'Only the gym\'s owner or a manager can export the member list.',
+        ),
+        findsOneWidget,
+      );
+      expect(repo.sharedExports, isEmpty);
+    });
+  });
+
   group('member list', () {
     testWidgets('tabs filter by standing and search narrows the list', (
       tester,

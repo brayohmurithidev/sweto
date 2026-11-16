@@ -245,6 +245,41 @@ class DioMembersRepository implements MembersRepository {
   }
 
   @override
+  Future<ExportFile> exportPayments(String gymId, {DateTime? month}) =>
+      _download(
+        ApiEndpoints.gymExportPayments(gymId),
+        query: {if (month != null) 'month': _yearMonth(month)},
+        fallbackName: 'payments.csv',
+      );
+
+  @override
+  Future<ExportFile> exportMembers(String gymId) => _download(
+    ApiEndpoints.gymExportMembers(gymId),
+    fallbackName: 'members.csv',
+  );
+
+  Future<ExportFile> _download(
+    String path, {
+    required String fallbackName,
+    Map<String, dynamic>? query,
+  }) async {
+    final r = await _dio.get<List<int>>(
+      path,
+      queryParameters: query,
+      options: Options(responseType: ResponseType.bytes),
+    );
+    // attachment; filename="flexfit-payments-2026-11.csv"
+    final disposition = r.headers.value('content-disposition') ?? '';
+    final name = RegExp(
+      r'filename="([^"]+)"',
+    ).firstMatch(disposition)?.group(1);
+    return ExportFile(
+      fileName: name ?? fallbackName,
+      bytes: r.data ?? const [],
+    );
+  }
+
+  @override
   Future<FinanceSummary> getFinance(String gymId, {DateTime? month}) async {
     final r = await _dio.get<Map<String, dynamic>>(
       ApiEndpoints.gymFinance(gymId),

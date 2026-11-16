@@ -9,10 +9,12 @@ import 'package:sweto_app/core/theme/radius.dart';
 import 'package:sweto_app/core/theme/spacing.dart';
 import 'package:sweto_app/core/theme/text_styles.dart';
 import 'package:sweto_app/features/members/domain/member_entities.dart';
+import 'package:sweto_app/features/members/presentation/export_share.dart';
 import 'package:sweto_app/features/members/presentation/member_formatting.dart';
 import 'package:sweto_app/features/members/presentation/members_providers.dart';
 import 'package:sweto_app/features/staff/domain/staff_entities.dart';
 import 'package:sweto_app/features/staff/presentation/staff_providers.dart';
+import 'package:sweto_app/shared/widgets/sweto_snackbar.dart';
 
 /// Tabs on the member list, each a standing filter on the API.
 enum MembersTab {
@@ -169,6 +171,34 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
     if (memberId != null) await _open(memberId);
   }
 
+  bool _exporting = false;
+
+  /// Shares every member (name, phone, standing, paid until) as a CSV.
+  Future<void> _export(BuildContext buttonContext) async {
+    if (_exporting) return;
+    final box = buttonContext.findRenderObject() as RenderBox?;
+    final origin = box == null
+        ? null
+        : box.localToGlobal(Offset.zero) & box.size;
+    setState(() => _exporting = true);
+    try {
+      final file = await ref
+          .read(membersRepositoryProvider)
+          .exportMembers(widget.gymId);
+      await ref.read(exportSharerProvider)(file, origin: origin);
+    } catch (error) {
+      if (mounted) {
+        showSwetoSnackBar(
+          context,
+          message: memberErrorMessage(error),
+          type: SwetoSnackBarType.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -176,6 +206,23 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.background,
         title: const Text('Members'),
+        actions: [
+          if (ref.watch(gymAccessProvider).can(GymPermission.exportMembers))
+            Builder(
+              builder: (buttonContext) => IconButton(
+                key: const Key('members-export'),
+                tooltip: 'Export member list',
+                onPressed: _exporting ? null : () => _export(buttonContext),
+                icon: _exporting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.ios_share),
+              ),
+            ),
+        ],
       ),
       floatingActionButton:
           ref.watch(gymAccessProvider).can(GymPermission.editMembers)

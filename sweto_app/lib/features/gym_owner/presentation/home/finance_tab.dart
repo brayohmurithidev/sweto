@@ -7,8 +7,10 @@ import 'package:sweto_app/core/theme/radius.dart';
 import 'package:sweto_app/core/theme/spacing.dart';
 import 'package:sweto_app/core/theme/text_styles.dart';
 import 'package:sweto_app/features/members/domain/member_entities.dart';
+import 'package:sweto_app/features/members/presentation/export_share.dart';
 import 'package:sweto_app/features/members/presentation/member_formatting.dart';
 import 'package:sweto_app/features/members/presentation/members_providers.dart';
+import 'package:sweto_app/shared/widgets/sweto_snackbar.dart';
 
 const _pageSize = 30;
 
@@ -34,6 +36,34 @@ class FinanceTabState extends ConsumerState<FinanceTab> {
   List<FinanceTransaction> _transactions = const [];
   int _total = 0;
   bool _loadingMore = false;
+  bool _exporting = false;
+
+  /// Shares the month on screen as a CSV (date, member, plan, method, amount,
+  /// receipt, recorded by).
+  Future<void> _export(BuildContext buttonContext) async {
+    if (_exporting) return;
+    final box = buttonContext.findRenderObject() as RenderBox?;
+    final origin = box == null
+        ? null
+        : box.localToGlobal(Offset.zero) & box.size;
+    setState(() => _exporting = true);
+    try {
+      final file = await ref
+          .read(membersRepositoryProvider)
+          .exportPayments(widget.gymId, month: _month);
+      await ref.read(exportSharerProvider)(file, origin: origin);
+    } catch (error) {
+      if (mounted) {
+        showSwetoSnackBar(
+          context,
+          message: memberErrorMessage(error),
+          type: SwetoSnackBarType.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
 
   @override
   void initState() {
@@ -140,7 +170,27 @@ class FinanceTabState extends ConsumerState<FinanceTab> {
         key: const Key('finance-list'),
         padding: const EdgeInsets.fromLTRB(20, 18, 20, 32),
         children: [
-          Text('Finance', style: AppTextStyles.headingMedium),
+          Row(
+            children: [
+              Expanded(
+                child: Text('Finance', style: AppTextStyles.headingMedium),
+              ),
+              Builder(
+                builder: (buttonContext) => TextButton.icon(
+                  key: const Key('finance-export'),
+                  onPressed: _exporting ? null : () => _export(buttonContext),
+                  icon: _exporting
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.ios_share, size: 18),
+                  label: const Text('Export'),
+                ),
+              ),
+            ],
+          ),
           const SizedBox(height: AppSpacing.xs),
           _monthSwitcher(summary),
           const SizedBox(height: AppSpacing.sm),

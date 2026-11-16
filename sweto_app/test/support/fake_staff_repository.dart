@@ -34,6 +34,7 @@ class FakeStaffRepository implements StaffRepository {
           GymPermission.editGym,
           GymPermission.viewFinance,
           GymPermission.archiveMembers,
+          GymPermission.exportMembers,
         },
         StaffRole.receptionist => front,
         StaffRole.trainer => {

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:sweto_app/core/router/app_routes.dart';
 import 'package:sweto_app/features/gym_owner/presentation/home/finance_tab.dart';
 import 'package:sweto_app/features/members/domain/member_entities.dart';
+import 'package:sweto_app/features/members/presentation/export_share.dart';
 import 'package:sweto_app/features/members/presentation/members_providers.dart';
 
 import 'members_screens_test.dart' show FakeMembers;
@@ -105,7 +106,12 @@ Future<void> _pump(WidgetTester tester, FakeMembers repo) async {
   addTearDown(router.dispose);
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [membersRepositoryProvider.overrideWithValue(repo)],
+      overrides: [
+        membersRepositoryProvider.overrideWithValue(repo),
+        exportSharerProvider.overrideWithValue(
+          (file, {origin}) async => repo.sharedExports.add(file.fileName),
+        ),
+      ],
       child: MaterialApp.router(routerConfig: router),
     ),
   );
@@ -226,5 +232,20 @@ void main() {
     await tester.tap(find.text('Retry'));
     await tester.pumpAndSettle();
     expect(find.text('KES 254,800'), findsOneWidget);
+  });
+
+  testWidgets('exports the month on screen as a CSV', (tester) async {
+    final repo = _repo();
+    await _pump(tester, repo);
+
+    await tester.tap(find.byKey(const Key('finance-export')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('finance-previous-month')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('finance-export')));
+    await tester.pumpAndSettle();
+
+    expect(repo.exports, ['payments this', 'payments 10']);
+    expect(repo.sharedExports, hasLength(2));
   });
 }
