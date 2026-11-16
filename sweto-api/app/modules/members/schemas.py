@@ -256,6 +256,19 @@ class ActivityItem(BaseModel):
     member_name: str | None
     detail: str
     ok: bool
+    by_user_id: UUID | None = Field(
+        default=None, description="The staff member who did it, when known."
+    )
+    by_name: str | None = Field(
+        default=None, description="Their name, when they have one on file."
+    )
+
+
+class ActivityPageData(BaseModel):
+    items: list[ActivityItem]
+    has_more: bool
+    limit: int
+    offset: int
 
 
 class DashboardData(BaseModel):

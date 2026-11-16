@@ -829,6 +829,17 @@ class GymStaffData(BaseModel):
         description="False until they first sign in; show them as invited."
     )
     added_at: datetime
+    today: "GymStaffTodayData | None" = Field(
+        default=None,
+        description="What they did today, by the gym's calendar (staff list).",
+    )
+
+
+class GymStaffTodayData(BaseModel):
+    payments: int
+    cash: Decimal
+    mpesa: Decimal
+    check_ins: int
 
 
 class GymStaffListData(BaseModel):

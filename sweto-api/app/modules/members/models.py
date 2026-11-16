@@ -81,6 +81,10 @@ class GymMember(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     sms_opted_out_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # The staff member who added them (for the gym's activity log).
+    added_by_user_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
     @property
     def can_receive_sms(self) -> bool:

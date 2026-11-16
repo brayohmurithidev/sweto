@@ -9,17 +9,18 @@ from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.gyms.permissions import GymPermission, role_can
+from app.modules.members.activity import gym_activity
 from app.modules.members.enums import (
     CheckInResult,
     GymMemberStatus,
-    PaymentMethod,
     PaymentStatus,
 )
-from app.modules.members.models import GymCheckIn, GymMember, GymMembership, Payment
+from app.modules.members.models import GymCheckIn, GymMember, Payment
 from app.modules.members.periods import EXPIRING_WITHIN_DAYS, add_months
 from app.modules.members.repository import current_start_column, paid_until_column
 from app.modules.members.schemas import (
     ActivityItem,
+    ActivityPageData,
     DailyRevenue,
     DashboardData,
     RevenueSummary,
@@ -147,80 +148,30 @@ class DashboardService:
         )
 
     async def _activity(self, gym_id: UUID) -> list[ActivityItem]:
-        check_ins = (
-            await self.session.execute(
-                select(GymCheckIn, GymMember.full_name)
-                .outerjoin(GymMember, GymMember.id == GymCheckIn.member_id)
-                .where(GymCheckIn.gym_id == gym_id)
-                .order_by(GymCheckIn.checked_in_at.desc())
-                .limit(RECENT_ITEMS)
-            )
-        ).all()
-        payments = (
-            await self.session.execute(
-                select(Payment, GymMembership, GymMember.full_name)
-                .join(GymMembership, GymMembership.id == Payment.membership_id)
-                .join(GymMember, GymMember.id == GymMembership.member_id)
-                .where(
-                    Payment.gym_id == gym_id,
-                    Payment.status == PaymentStatus.COMPLETED,
-                )
-                .order_by(Payment.paid_at.desc())
-                .limit(RECENT_ITEMS)
-            )
-        ).all()
-        added = (
-            await self.session.execute(
-                select(GymMember)
-                .where(
-                    GymMember.gym_id == gym_id,
-                    # An archived member (e.g. added by mistake) isn't news.
-                    GymMember.status == GymMemberStatus.ACTIVE,
-                )
-                .order_by(GymMember.created_at.desc())
-                .limit(RECENT_ITEMS)
-            )
-        ).scalars()
+        items, _ = await gym_activity(self.session, gym_id, limit=RECENT_ITEMS)
+        return items
 
-        items = [
-            ActivityItem(
-                kind="check_in",
-                at=check_in.checked_in_at,
-                member_id=check_in.member_id,
-                member_name=name,
-                detail="Checked in"
-                if check_in.result == CheckInResult.ALLOWED
-                else f"Refused: {check_in.result.value.replace('_', ' ')}",
-                ok=check_in.result == CheckInResult.ALLOWED,
-            )
-            for check_in, name in check_ins
-        ]
-        items += [
-            ActivityItem(
-                kind="payment",
-                at=payment.paid_at or payment.created_at,
-                member_id=membership.member_id,
-                member_name=name,
-                detail=f"Paid {payment.currency} {payment.amount:,.0f} "
-                f"({'M-Pesa' if payment.method == PaymentMethod.MPESA else 'cash'}), "
-                f"{membership.plan_name}",
-                ok=True,
-            )
-            for payment, membership, name in payments
-        ]
-        items += [
-            ActivityItem(
-                kind="member_added",
-                at=member.created_at,
-                member_id=member.id,
-                member_name=member.full_name,
-                detail="New member",
-                ok=True,
-            )
-            for member in added
-        ]
-        items.sort(key=lambda item: item.at, reverse=True)
-        return items[:RECENT_ITEMS]
+    async def activity(
+        self,
+        *,
+        user_id: UUID,
+        gym_id: UUID,
+        by_user_id: UUID | None,
+        limit: int,
+        offset: int,
+    ) -> ActivityPageData:
+        """The gym's activity log, optionally one staff member's. Owner and
+        manager."""
+
+        gym = await self.members._gym_for(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.VIEW_ACTIVITY
+        )
+        items, has_more = await gym_activity(
+            self.session, gym.id, limit=limit, offset=offset, by_user_id=by_user_id
+        )
+        return ActivityPageData(
+            items=items, has_more=has_more, limit=limit, offset=offset
+        )
 
     async def _first_name(self, user_id: UUID) -> str | None:
         full_name = await self.session.scalar(

@@ -270,6 +270,8 @@ class ActivityItem {
     required this.ok,
     this.memberId,
     this.memberName,
+    this.byUserId,
+    this.byName,
   });
 
   /// check_in, payment or member_added
@@ -279,6 +281,17 @@ class ActivityItem {
   final bool ok;
   final String? memberId;
   final String? memberName;
+
+  /// The staff member who did it, when known.
+  final String? byUserId;
+  final String? byName;
+}
+
+/// One page of the gym's activity log.
+class ActivityPage {
+  const ActivityPage({required this.items, required this.hasMore});
+  final List<ActivityItem> items;
+  final bool hasMore;
 }
 
 class DashboardSummary {

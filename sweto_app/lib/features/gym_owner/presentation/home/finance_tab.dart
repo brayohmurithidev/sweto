@@ -7,6 +7,7 @@ import 'package:sweto_app/core/theme/radius.dart';
 import 'package:sweto_app/core/theme/spacing.dart';
 import 'package:sweto_app/core/theme/text_styles.dart';
 import 'package:sweto_app/features/members/domain/member_entities.dart';
+import 'package:sweto_app/features/members/presentation/activity_row.dart';
 import 'package:sweto_app/features/members/presentation/member_formatting.dart';
 import 'package:sweto_app/features/members/presentation/members_providers.dart';
 
@@ -483,6 +484,7 @@ class FinanceTabState extends ConsumerState<FinanceTab> {
       formatDayTime(t.at),
       t.planName,
       t.isMpesa ? 'M-Pesa' : 'Cash',
+      if (t.recordedByName != null) 'by ${firstName(t.recordedByName!)}',
       if (t.receipt != null) t.receipt!,
     ];
     return ListTile(

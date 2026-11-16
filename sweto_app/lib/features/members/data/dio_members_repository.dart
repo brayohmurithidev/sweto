@@ -228,21 +228,42 @@ class DioMembersRepository implements MembersRepository {
           .toList(),
       recentActivity: (d['recent_activity'] as List? ?? const [])
           .map((item) => _map(item))
-          .map(
-            (item) => ActivityItem(
-              kind: item['kind'] as String? ?? '',
-              at:
-                  DateTime.tryParse('${item['at']}')?.toLocal() ??
-                  DateTime.now(),
-              detail: item['detail'] as String? ?? '',
-              ok: item['ok'] != false,
-              memberId: item['member_id'] as String?,
-              memberName: item['member_name'] as String?,
-            ),
-          )
+          .map(_activity)
           .toList(),
     );
   }
+
+  @override
+  Future<ActivityPage> getActivity(
+    String gymId, {
+    String? byUserId,
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    final r = await _dio.get<Map<String, dynamic>>(
+      ApiEndpoints.gymActivity(gymId),
+      queryParameters: {'by': ?byUserId, 'limit': limit, 'offset': offset},
+    );
+    final d = _data(r.data);
+    return ActivityPage(
+      items: (d['items'] as List? ?? const [])
+          .map(_map)
+          .map(_activity)
+          .toList(),
+      hasMore: d['has_more'] == true,
+    );
+  }
+
+  ActivityItem _activity(Map<String, dynamic> item) => ActivityItem(
+    kind: item['kind'] as String? ?? '',
+    at: DateTime.tryParse('${item['at']}')?.toLocal() ?? DateTime.now(),
+    detail: item['detail'] as String? ?? '',
+    ok: item['ok'] != false,
+    memberId: item['member_id'] as String?,
+    memberName: item['member_name'] as String?,
+    byUserId: item['by_user_id'] as String?,
+    byName: item['by_name'] as String?,
+  );
 
   @override
   Future<FinanceSummary> getFinance(String gymId, {DateTime? month}) async {

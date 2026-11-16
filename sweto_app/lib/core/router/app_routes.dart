@@ -53,6 +53,9 @@ class AppRoutes {
   static const mpesaTillName = 'mpesa-till';
   static const mpesaTillPath = '/gyms/:gymId/mpesa-till';
 
+  static const activityName = 'activity';
+  static const activityPath = '/gyms/:gymId/activity';
+
   static const staffName = 'staff';
   static const staffPath = '/gyms/:gymId/staff';
   static const staffSuspendedName = 'staff-suspended';

@@ -131,7 +131,10 @@ class GymMemberService:
         if await self.members.phone_taken(gym_id=gym.id, phone_number=phone):
             raise self._phone_taken()
         member = GymMember(
-            gym_id=gym.id, full_name=payload.full_name, phone_number=phone
+            gym_id=gym.id,
+            full_name=payload.full_name,
+            phone_number=phone,
+            added_by_user_id=user_id,
         )
         if payload.sms_consent:
             self._record_consent(member, user_id)

@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:sweto_app/core/router/app_routes.dart';
 import 'package:sweto_app/core/theme/colors.dart';
 import 'package:sweto_app/core/theme/radius.dart';
 import 'package:sweto_app/core/theme/spacing.dart';
 import 'package:sweto_app/core/theme/text_styles.dart';
+import 'package:sweto_app/features/members/presentation/member_formatting.dart';
 import 'package:sweto_app/features/members/presentation/members_providers.dart';
 import 'package:sweto_app/features/staff/domain/staff_entities.dart';
 import 'package:sweto_app/features/staff/presentation/staff_providers.dart';
@@ -218,6 +221,17 @@ class _StaffTile extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 2),
+                    if (_showsToday(member))
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          _todayLine(member.today!),
+                          key: Key('staff-today-${member.id}'),
+                          style: AppTextStyles.caption.copyWith(
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ),
                     Text(
                       [
                         member.role.label,
@@ -575,6 +589,25 @@ class _ManageStaffSheetState extends ConsumerState<_ManageStaffSheet> {
                 member.isSuspended ? 'Turn access back on' : 'Pause access',
               ),
             ),
+            if (member.userId != null)
+              OutlinedButton.icon(
+                key: const Key('staff-activity'),
+                onPressed: _busy
+                    ? null
+                    : () {
+                        Navigator.pop(context);
+                        context.pushNamed(
+                          AppRoutes.activityName,
+                          pathParameters: {'gymId': widget.gymId},
+                          queryParameters: {
+                            'by': member.userId!,
+                            'name': member.displayName,
+                          },
+                        );
+                      },
+                icon: const Icon(Icons.history),
+                label: const Text('See their activity'),
+              ),
             TextButton.icon(
               key: const Key('remove-staff'),
               onPressed: _busy ? null : _remove,
@@ -587,4 +620,23 @@ class _ManageStaffSheetState extends ConsumerState<_ManageStaffSheet> {
       ),
     );
   }
+}
+
+/// "Today: 3 payments · KES 15,000 cash · 12 check-ins"
+String _todayLine(StaffDay day) {
+  if (day.isEmpty) return 'Today: nothing yet';
+  final parts = [
+    '${day.payments} payment${day.payments == 1 ? '' : 's'}',
+    if (day.cash > 0) '${formatMoney(day.cash, 'KES')} cash',
+    if (day.mpesa > 0) '${formatMoney(day.mpesa, 'KES')} M-Pesa',
+    '${day.checkIns} check-in${day.checkIns == 1 ? '' : 's'}',
+  ];
+  return 'Today: ${parts.join(' · ')}';
+}
+
+/// Staff always see their day; the owner only once they did something.
+bool _showsToday(StaffMember member) {
+  final day = member.today;
+  if (day == null) return false;
+  return !member.isPrimaryOwner || !day.isEmpty;
 }

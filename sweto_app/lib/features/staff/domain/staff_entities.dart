@@ -33,6 +33,7 @@ enum GymPermission {
   managePaymentSettings('manage_payment_settings'),
   manageStaff('manage_staff'),
   viewFinance('view_finance'),
+  viewActivity('view_activity'),
   viewMembers('view_members'),
   editMembers('edit_members'),
   archiveMembers('archive_members'),
@@ -74,11 +75,14 @@ class StaffMember {
     required this.status,
     required this.isPrimaryOwner,
     required this.hasSignedIn,
+    this.userId,
     this.fullName,
     this.phoneNumber,
+    this.today,
   });
 
   final String id;
+  final String? userId;
   final String? fullName;
   final String? phoneNumber;
   final StaffRole role;
@@ -90,6 +94,9 @@ class StaffMember {
   /// False until they first sign in: shown as invited.
   final bool hasSignedIn;
 
+  /// What they did today (staff list only).
+  final StaffDay? today;
+
   bool get isSuspended => status == 'suspended';
   String get displayName =>
       (fullName?.trim().isNotEmpty ?? false) ? fullName! : (phoneNumber ?? '');
@@ -99,4 +106,21 @@ class AddedStaff {
   const AddedStaff({required this.staff, required this.inviteSent});
   final StaffMember staff;
   final bool inviteSent;
+}
+
+/// One staff member's day, for the owner's end-of-day check.
+class StaffDay {
+  const StaffDay({
+    required this.payments,
+    required this.cash,
+    required this.mpesa,
+    required this.checkIns,
+  });
+
+  final int payments;
+  final double cash;
+  final double mpesa;
+  final int checkIns;
+
+  bool get isEmpty => payments == 0 && checkIns == 0;
 }

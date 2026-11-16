@@ -8,6 +8,7 @@ import 'package:sweto_app/core/theme/spacing.dart';
 import 'package:sweto_app/core/theme/text_styles.dart';
 import 'package:sweto_app/features/gym_owner/presentation/home/revenue_sparkline.dart';
 import 'package:sweto_app/features/members/domain/member_entities.dart';
+import 'package:sweto_app/features/members/presentation/activity_row.dart';
 import 'package:sweto_app/features/members/presentation/member_formatting.dart';
 import 'package:sweto_app/features/members/presentation/members_providers.dart';
 import 'package:sweto_app/features/staff/domain/staff_entities.dart';
@@ -160,7 +161,19 @@ class HomeTabState extends ConsumerState<HomeTab> {
             ),
           ],
           const SizedBox(height: AppSpacing.lg),
-          Text('Recent activity', style: AppTextStyles.titleLarge),
+          Row(
+            children: [
+              Expanded(
+                child: Text('Recent activity', style: AppTextStyles.titleLarge),
+              ),
+              if (access.can(GymPermission.viewActivity))
+                TextButton(
+                  key: const Key('home-activity-all'),
+                  onPressed: () => _go(AppRoutes.activityName),
+                  child: const Text('See all'),
+                ),
+            ],
+          ),
           const SizedBox(height: AppSpacing.xs),
           if (summary.recentActivity.isEmpty)
             Text(
@@ -275,42 +288,15 @@ class HomeTabState extends ConsumerState<HomeTab> {
   }
 
   Widget _activityRow(ActivityItem item) {
-    final (icon, color) = switch (item.kind) {
-      'check_in' when item.ok => (Icons.check_circle, AppColors.secondary),
-      'check_in' => (Icons.block, AppColors.error),
-      'payment' => (Icons.payments_outlined, AppColors.primary),
-      _ => (Icons.person_add_alt_1, AppColors.textSecondary),
-    };
     final memberId = item.memberId;
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(icon, color: color),
-      title: Text(
-        item.memberName ?? 'Unknown code',
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-      subtitle: Text(
-        item.detail,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: AppTextStyles.bodySmall,
-      ),
-      trailing: Text(_ago(item.at), style: AppTextStyles.caption),
+    return ActivityRow(
+      item: item,
+      now: _now(),
       onTap: memberId == null
           ? null
           : () =>
                 _go(AppRoutes.memberDetailName, extra: {'memberId': memberId}),
     );
-  }
-
-  String _ago(DateTime at) {
-    final minutes = _now().difference(at).inMinutes;
-    if (minutes < 1) return 'just now';
-    if (minutes < 60) return '$minutes min ago';
-    final hours = minutes ~/ 60;
-    if (hours < 24) return '$hours h ago';
-    return formatDay(at);
   }
 }
 

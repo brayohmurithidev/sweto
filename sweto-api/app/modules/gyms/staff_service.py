@@ -7,8 +7,9 @@ their phone number like everyone else and land in this gym.
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,6 +42,7 @@ from app.modules.gyms.schemas import (
     GymStaffAccessData,
     GymStaffData,
     GymStaffListData,
+    GymStaffTodayData,
     UpdateGymStaffRequest,
 )
 from app.modules.gyms.staff_messages import staff_invite
@@ -83,9 +85,28 @@ class GymStaffService:
         )
 
     async def list_staff(self, *, user_id: UUID, gym_id: UUID) -> GymStaffListData:
-        await self._gym_for_owner(user_id=user_id, gym_id=gym_id)
+        gym = await self._gym_for_owner(user_id=user_id, gym_id=gym_id)
         rows = await self.staff.list_for_gym(gym_id)
-        return GymStaffListData(staff=[await self._data(row) for row in rows])
+        # Imported here: the members module builds on the gyms one.
+        from app.modules.members.activity import StaffDay, staff_day
+
+        zone = ZoneInfo(gym.timezone)
+        start = datetime.combine(self.clock().astimezone(zone).date(), time.min, zone)
+        days = await staff_day(
+            self.session, gym.id, start=start, end=start + timedelta(days=1)
+        )
+        staff = []
+        for row in rows:
+            data = await self._data(row)
+            day = days.get(row.user_id, StaffDay())
+            data.today = GymStaffTodayData(
+                payments=day.payments,
+                cash=day.cash,
+                mpesa=day.mpesa,
+                check_ins=day.check_ins,
+            )
+            staff.append(data)
+        return GymStaffListData(staff=staff)
 
     async def add_staff(
         self, *, user_id: UUID, gym_id: UUID, payload: AddGymStaffRequest
