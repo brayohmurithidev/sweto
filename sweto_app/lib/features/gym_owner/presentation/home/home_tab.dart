@@ -10,6 +10,8 @@ import 'package:sweto_app/features/gym_owner/presentation/home/revenue_sparkline
 import 'package:sweto_app/features/members/domain/member_entities.dart';
 import 'package:sweto_app/features/members/presentation/member_formatting.dart';
 import 'package:sweto_app/features/members/presentation/members_providers.dart';
+import 'package:sweto_app/features/staff/domain/staff_entities.dart';
+import 'package:sweto_app/features/staff/presentation/staff_providers.dart';
 
 /// The verified gym's Home tab: today's numbers, revenue, quick actions and
 /// what happened recently.
@@ -85,6 +87,23 @@ class HomeTabState extends ConsumerState<HomeTab> {
               ),
       );
     }
+    final access = ref.watch(gymAccessProvider);
+    final actions = [
+      if (access.can(GymPermission.checkIn))
+        _Action(
+          key: const Key('home-scan'),
+          icon: Icons.qr_code_scanner,
+          label: 'Scan QR',
+          onTap: () => _go(AppRoutes.checkInName),
+        ),
+      if (access.can(GymPermission.editMembers))
+        _Action(
+          key: const Key('home-add-member'),
+          icon: Icons.person_add_alt_1,
+          label: 'Add member',
+          onTap: () => _go(AppRoutes.addMemberName),
+        ),
+    ];
     return RefreshIndicator(
       color: AppColors.primary,
       onRefresh: reload,
@@ -123,32 +142,23 @@ class HomeTabState extends ConsumerState<HomeTab> {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
-          _revenueCard(summary),
-          const SizedBox(height: AppSpacing.lg),
-          Text('Quick actions', style: AppTextStyles.titleLarge),
-          const SizedBox(height: AppSpacing.xs),
-          Row(
-            children: [
-              Expanded(
-                child: _Action(
-                  key: const Key('home-scan'),
-                  icon: Icons.qr_code_scanner,
-                  label: 'Scan QR',
-                  onTap: () => _go(AppRoutes.checkInName),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _Action(
-                  key: const Key('home-add-member'),
-                  icon: Icons.person_add_alt_1,
-                  label: 'Add member',
-                  onTap: () => _go(AppRoutes.addMemberName),
-                ),
-              ),
-            ],
-          ),
+          if (summary.showsRevenue) ...[
+            const SizedBox(height: AppSpacing.sm),
+            _revenueCard(summary),
+          ],
+          if (actions.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.lg),
+            Text('Quick actions', style: AppTextStyles.titleLarge),
+            const SizedBox(height: AppSpacing.xs),
+            Row(
+              children: [
+                for (final (i, action) in actions.indexed) ...[
+                  if (i > 0) const SizedBox(width: 10),
+                  Expanded(child: action),
+                ],
+              ],
+            ),
+          ],
           const SizedBox(height: AppSpacing.lg),
           Text('Recent activity', style: AppTextStyles.titleLarge),
           const SizedBox(height: AppSpacing.xs),

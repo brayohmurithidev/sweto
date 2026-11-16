@@ -11,6 +11,8 @@ import 'package:sweto_app/core/theme/text_styles.dart';
 import 'package:sweto_app/features/members/domain/member_entities.dart';
 import 'package:sweto_app/features/members/presentation/member_formatting.dart';
 import 'package:sweto_app/features/members/presentation/members_providers.dart';
+import 'package:sweto_app/features/staff/domain/staff_entities.dart';
+import 'package:sweto_app/features/staff/presentation/staff_providers.dart';
 
 /// Tabs on the member list, each a standing filter on the API.
 enum MembersTab {
@@ -175,14 +177,17 @@ class _MembersScreenState extends ConsumerState<MembersScreen> {
         backgroundColor: AppColors.background,
         title: const Text('Members'),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        key: const Key('add-member-button'),
-        onPressed: _add,
-        backgroundColor: AppColors.primary,
-        foregroundColor: AppColors.white,
-        icon: const Icon(Icons.person_add_alt_1),
-        label: const Text('Add member'),
-      ),
+      floatingActionButton:
+          ref.watch(gymAccessProvider).can(GymPermission.editMembers)
+          ? FloatingActionButton.extended(
+              key: const Key('add-member-button'),
+              onPressed: _add,
+              backgroundColor: AppColors.primary,
+              foregroundColor: AppColors.white,
+              icon: const Icon(Icons.person_add_alt_1),
+              label: const Text('Add member'),
+            )
+          : null,
       body: Column(
         children: [
           Padding(

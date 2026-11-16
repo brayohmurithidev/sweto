@@ -20,6 +20,9 @@ import 'package:sweto_app/features/gym_owner/presentation/onboarding_coordinator
 
 import 'support/fake_auth_repository.dart';
 import 'support/fake_otp_delivery_repository.dart';
+import 'package:sweto_app/features/staff/presentation/staff_providers.dart';
+
+import 'support/fake_staff_repository.dart';
 
 /// End-to-end session lifecycle through the real router, splash, sign-in
 /// screens and session controller, with the network replaced by fakes.
@@ -45,6 +48,7 @@ void main() {
           FakeOtpDeliveryRepository(),
         ),
         gymOwnerRepositoryProvider.overrideWithValue(_DashboardGyms()),
+        staffRepositoryProvider.overrideWithValue(FakeStaffRepository()),
       ],
     );
     addTearDown(container.dispose);

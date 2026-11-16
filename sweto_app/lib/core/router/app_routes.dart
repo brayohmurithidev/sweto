@@ -53,6 +53,11 @@ class AppRoutes {
   static const mpesaTillName = 'mpesa-till';
   static const mpesaTillPath = '/gyms/:gymId/mpesa-till';
 
+  static const staffName = 'staff';
+  static const staffPath = '/gyms/:gymId/staff';
+  static const staffSuspendedName = 'staff-suspended';
+  static const staffSuspendedPath = '/onboarding/staff-suspended';
+
   // A verified gym's details, edited from More.
   static const gymProfileSettingsName = 'gym-settings-profile';
   static const gymProfileSettingsPath = '/gyms/:gymId/settings/profile';

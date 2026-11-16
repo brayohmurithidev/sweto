@@ -21,6 +21,7 @@ enum OnboardingDestination {
   verificationPending,
   home,
   admin,
+  staffSuspended,
   memberComingSoon,
   unsupported,
 }
@@ -72,6 +73,11 @@ class OnboardingCoordinator {
         return OnboardingDestination.home;
       case 'dashboard':
         return OnboardingDestination.home;
+      // Someone a gym owner added: straight to that gym, no setup.
+      case 'gym_staff':
+        return OnboardingDestination.home;
+      case 'staff_suspended':
+        return OnboardingDestination.staffSuspended;
       case 'member_profile_setup':
         return OnboardingDestination.memberComingSoon;
       default:
