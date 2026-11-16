@@ -28,6 +28,7 @@ from app.integrations.mpesa.base import (
 )
 from app.modules.gyms.enums import MembershipBillingPeriod
 from app.modules.gyms.models import Gym
+from app.modules.gyms.permissions import GymPermission
 from app.modules.members.enums import (
     GymMembershipStatus,
     GymMemberStatus,
@@ -92,7 +93,9 @@ class MpesaPaymentService:
             raise MpesaNotConfiguredError(
                 "M-Pesa payments aren't switched on yet. Record cash for now."
             )
-        gym = await self.members._gym_for_manager(user_id=user_id, gym_id=gym_id)
+        gym = await self.members._gym_for(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.TAKE_PAYMENTS
+        )
         member = await self.members._member(gym, member_id, for_update=True)
         if member.status == GymMemberStatus.ARCHIVED:
             raise GymMemberArchivedError(
@@ -196,7 +199,9 @@ class MpesaPaymentService:
     async def status(
         self, *, user_id: UUID, gym_id: UUID, payment_id: UUID
     ) -> MpesaPaymentData:
-        gym = await self.members._gym_for_manager(user_id=user_id, gym_id=gym_id)
+        gym = await self.members._gym_for(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.TAKE_PAYMENTS
+        )
         payment = await self.session.scalar(
             select(Payment).where(Payment.id == payment_id, Payment.gym_id == gym.id)
         )

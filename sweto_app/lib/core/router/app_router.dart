@@ -21,6 +21,7 @@ import 'package:sweto_app/features/members/presentation/check_in_screen.dart';
 import 'package:sweto_app/features/members/presentation/member_detail_screen.dart';
 import 'package:sweto_app/features/members/presentation/members_screen.dart';
 import 'package:sweto_app/features/members/presentation/mpesa_till_screen.dart';
+import 'package:sweto_app/features/staff/presentation/staff_screen.dart';
 
 CustomTransitionPage<void> _onboardingPage(GoRouterState state, Widget child) =>
     CustomTransitionPage<void>(
@@ -182,6 +183,27 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         name: AppRoutes.mpesaTillName,
         builder: (context, state) =>
             MpesaTillScreen(gymId: state.pathParameters['gymId']!),
+      ),
+      GoRoute(
+        path: AppRoutes.staffPath,
+        name: AppRoutes.staffName,
+        builder: (context, state) =>
+            StaffScreen(gymId: state.pathParameters['gymId']!),
+      ),
+      GoRoute(
+        path: AppRoutes.staffSuspendedPath,
+        name: AppRoutes.staffSuspendedName,
+        builder: (context, state) => Consumer(
+          builder: (context, ref, _) => SimpleOnboardingPlaceholder(
+            key: const Key('staff-suspended-screen'),
+            title: 'Access paused',
+            message:
+                'Your gym has paused your access on SWETO. Ask the owner to '
+                'turn it back on, then sign in again.',
+            actionLabel: 'Log out',
+            action: () => ref.read(sessionControllerProvider.notifier).logout(),
+          ),
+        ),
       ),
       GoRoute(
         path: AppRoutes.checkInPath,

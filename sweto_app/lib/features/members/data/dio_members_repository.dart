@@ -215,6 +215,7 @@ class DioMembersRepository implements MembersRepository {
     final revenue = _map(d['revenue']);
     return DashboardSummary(
       gymName: _string(d, 'gym_name'),
+      showsRevenue: d['revenue'] != null,
       ownerFirstName: d['owner_first_name'] as String?,
       activeMembers: (d['active_members'] as num?)?.toInt() ?? 0,
       expiringMembers: (d['expiring_members'] as num?)?.toInt() ?? 0,

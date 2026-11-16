@@ -350,7 +350,7 @@ async def test_only_this_gyms_owner_or_manager_can_manage_its_members(
     response = await pay_cash(owner, gym_id, added["id"], plan_id=other_plan)
     assert response.status_code == 422
 
-    # Receptionists can't manage members; managers can.
+    # Receptionists add and edit members but cannot archive them; managers can.
     staff = await sign_in_owner(api, phone="0744000000")
     await api.sql(
         "INSERT INTO gym_staff (id, gym_id, user_id, role, status, is_primary_owner) "
@@ -358,13 +358,17 @@ async def test_only_this_gyms_owner_or_manager_can_manage_its_members(
         "FROM users WHERE phone_number = '+254744000000'",
         gym_id=gym_id,
     )
-    assert (await staff.call("GET", base)).status_code == 403
+    assert (await staff.call("GET", base)).status_code == 200
+    archive = f"{base}/{added['id']}/archive"
+    response = await staff.call("POST", archive)
+    assert response.status_code == 403
+    assert "archive" in response.json()["error"]["message"]
     await api.sql(
         "UPDATE gym_staff SET role = 'manager' WHERE gym_id = :gym_id "
         "AND user_id = (SELECT id FROM users WHERE phone_number = '+254744000000')",
         gym_id=gym_id,
     )
-    assert (await staff.call("GET", base)).status_code == 200
+    assert (await staff.call("POST", archive)).status_code == 200
 
     assert (await api.client.get(f"/api/v1{base}")).status_code == 401
 

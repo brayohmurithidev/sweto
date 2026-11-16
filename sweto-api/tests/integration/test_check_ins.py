@@ -242,22 +242,22 @@ async def test_codes_only_work_at_their_own_gym(
     assert response.status_code == 403
 
 
-async def test_door_staff_check_in_but_only_managers_issue_codes(
+async def test_door_staff_check_in_but_trainers_cannot_issue_codes(
     api: IntegrationAPI, storage: FakeStorage
 ) -> None:
     owner = await sign_in_owner(api)
     gym_id, plans = await gym_with_plans(owner, storage)
     member, code = await paid_member(owner, gym_id, plans["Monthly"])
-    receptionist = await sign_in_owner(api, phone="0744000000")
+    trainer = await sign_in_owner(api, phone="0744000000")
     await api.sql(
         "INSERT INTO gym_staff (id, gym_id, user_id, role, status, is_primary_owner) "
-        "SELECT gen_random_uuid(), :gym_id, id, 'receptionist', 'active', false "
+        "SELECT gen_random_uuid(), :gym_id, id, 'trainer', 'active', false "
         "FROM users WHERE phone_number = '+254744000000'",
         gym_id=gym_id,
     )
 
-    assert (await check_in(receptionist, gym_id, code))["result"] == "allowed"
-    response = await receptionist.call(
+    assert (await check_in(trainer, gym_id, code))["result"] == "allowed"
+    response = await trainer.call(
         "POST", f"/gyms/{gym_id}/members/{member['id']}/check-in-code"
     )
     assert response.status_code == 403

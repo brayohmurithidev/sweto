@@ -20,6 +20,7 @@ from app.core.exceptions import (
     gym_not_found_handler,
     gym_photo_error_handler,
     gym_slug_conflict_handler,
+    gym_staff_error_handler,
     gym_verification_error_handler,
     invalid_access_token_handler,
     invalid_email_or_password_handler,
@@ -94,6 +95,7 @@ from app.modules.gyms.exceptions import (
     GymPhotoUploadInvalidError,
     GymProfileIncompleteError,
     GymSlugConflictError,
+    GymStaffError,
     GymVerificationAccessDeniedError,
     GymVerificationAlreadyApprovedError,
     GymVerificationAlreadyPendingError,
@@ -286,6 +288,7 @@ def create_application() -> FastAPI:
         GymAccessDeniedError,
         gym_access_denied_handler,
     )
+    application.add_exception_handler(GymStaffError, gym_staff_error_handler)
     for verification_exception in (
         GymVerificationDocumentNotFoundError,
         GymVerificationDocumentInvalidError,

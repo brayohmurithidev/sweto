@@ -9,8 +9,7 @@ from app.core.config import Settings
 from app.integrations.mpesa.base import MpesaAccount
 from app.integrations.mpesa.credentials import PasskeyCipher
 from app.integrations.mpesa.dependencies import default_mpesa_account
-from app.modules.gyms.enums import GymStaffRole
-from app.modules.gyms.exceptions import GymAccessDeniedError
+from app.modules.gyms.permissions import GymPermission
 from app.modules.members.exceptions import (
     InvalidMembershipPaymentError,
     MpesaNotConfiguredError,
@@ -34,7 +33,9 @@ class MpesaAccounts:
         self.members = members
 
     async def get(self, *, user_id: UUID, gym_id: UUID) -> MpesaAccountData:
-        gym = await self.members._gym_for_manager(user_id=user_id, gym_id=gym_id)
+        gym = await self.members._gym_for(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.TAKE_PAYMENTS
+        )
         return self._data(await self._row(gym.id))
 
     async def save(
@@ -42,14 +43,11 @@ class MpesaAccounts:
     ) -> MpesaAccountData:
         """Only the gym's owner sets where its money goes."""
 
-        await self.members._gym_for_manager(user_id=user_id, gym_id=gym_id)
-        staff = await self.members.staff.get_user_membership(
-            user_id=user_id, gym_id=gym_id
+        await self.members._gym_for(
+            user_id=user_id,
+            gym_id=gym_id,
+            permission=GymPermission.MANAGE_PAYMENT_SETTINGS,
         )
-        if staff is None or staff.role != GymStaffRole.OWNER:
-            raise GymAccessDeniedError(
-                "Only the gym's owner can change where M-Pesa payments go."
-            )
         cipher = self._cipher()
         row = await self._row(gym_id)
         if row is None and payload.passkey is None:

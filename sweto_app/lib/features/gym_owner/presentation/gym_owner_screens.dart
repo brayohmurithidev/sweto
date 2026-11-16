@@ -45,6 +45,7 @@ void goToDestination(BuildContext context, OnboardingDestination destination) {
       AppRoutes.verificationPendingName,
     OnboardingDestination.home => AppRoutes.homeName,
     OnboardingDestination.admin => AppRoutes.adminHomeName,
+    OnboardingDestination.staffSuspended => AppRoutes.staffSuspendedName,
     OnboardingDestination.memberComingSoon => AppRoutes.memberComingSoonName,
     OnboardingDestination.unsupported => AppRoutes.unsupportedOnboardingName,
   };

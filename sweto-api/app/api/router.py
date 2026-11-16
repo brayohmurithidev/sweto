@@ -11,6 +11,7 @@ from app.modules.auth.whatsapp_webhook_router import (
     router as whatsapp_webhook_router,
 )
 from app.modules.gyms.router import router as gym_router
+from app.modules.gyms.staff_router import router as gym_staff_router
 from app.modules.members.check_in_router import router as check_in_router
 from app.modules.members.dashboard_router import router as dashboard_router
 from app.modules.members.finance_router import router as finance_router
@@ -36,6 +37,7 @@ api_router.include_router(whatsapp_webhook_router)
 api_router.include_router(account_router)
 api_router.include_router(profile_router)
 api_router.include_router(gym_router)
+api_router.include_router(gym_staff_router)
 api_router.include_router(member_router)
 api_router.include_router(check_in_router)
 api_router.include_router(dashboard_router)

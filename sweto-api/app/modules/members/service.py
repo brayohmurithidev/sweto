@@ -6,9 +6,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.phone import normalize_phone_number
-from app.modules.gyms.enums import GymStaffRole, MembershipBillingPeriod
+from app.modules.gyms.enums import MembershipBillingPeriod
 from app.modules.gyms.exceptions import GymAccessDeniedError, GymNotFoundError
 from app.modules.gyms.models import Gym
+from app.modules.gyms.permissions import DENIED_MESSAGES, GymPermission, role_can
 from app.modules.gyms.repository import GymRepository, GymStaffRepository
 from app.modules.members.codes import display_code, generate_code, hash_code
 from app.modules.members.enums import (
@@ -47,7 +48,6 @@ from app.modules.members.schemas import (
 )
 from app.shared.clock import Clock
 
-MEMBER_MANAGERS = frozenset({GymStaffRole.OWNER, GymStaffRole.MANAGER})
 BACKDATE_LIMIT_DAYS = 90
 
 
@@ -99,7 +99,9 @@ class GymMemberService:
         limit: int,
         offset: int,
     ) -> GymMemberListData:
-        gym = await self._gym_for_manager(user_id=user_id, gym_id=gym_id)
+        gym = await self._gym_for(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.VIEW_MEMBERS
+        )
         today = self._today(gym)
         rows, total = await self.members.list(
             gym_id=gym.id,
@@ -122,7 +124,9 @@ class GymMemberService:
     async def create_member(
         self, *, user_id: UUID, gym_id: UUID, payload: CreateGymMemberRequest
     ) -> GymMemberData:
-        gym = await self._gym_for_manager(user_id=user_id, gym_id=gym_id)
+        gym = await self._gym_for(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.EDIT_MEMBERS
+        )
         phone = self._normalize_phone(payload.phone_number, gym)
         if await self.members.phone_taken(gym_id=gym.id, phone_number=phone):
             raise self._phone_taken()
@@ -139,7 +143,9 @@ class GymMemberService:
     async def get_member(
         self, *, user_id: UUID, gym_id: UUID, member_id: UUID
     ) -> GymMemberDetailData:
-        gym = await self._gym_for_manager(user_id=user_id, gym_id=gym_id)
+        gym = await self._gym_for(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.VIEW_MEMBERS
+        )
         return await self._detail(gym, member_id)
 
     async def update_member(
@@ -150,7 +156,9 @@ class GymMemberService:
         member_id: UUID,
         payload: UpdateGymMemberRequest,
     ) -> GymMemberData:
-        gym = await self._gym_for_manager(user_id=user_id, gym_id=gym_id)
+        gym = await self._gym_for(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.EDIT_MEMBERS
+        )
         member = await self._member(gym, member_id, for_update=True)
         if payload.full_name is not None:
             member.full_name = payload.full_name
@@ -169,7 +177,9 @@ class GymMemberService:
     ) -> GymMemberData:
         """Archive instead of delete, so payment history survives."""
 
-        gym = await self._gym_for_manager(user_id=user_id, gym_id=gym_id)
+        gym = await self._gym_for(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.ARCHIVE_MEMBERS
+        )
         member = await self._member(gym, member_id, for_update=True)
         member.status = GymMemberStatus.ARCHIVED if archived else GymMemberStatus.ACTIVE
         await self.session.commit()
@@ -185,7 +195,9 @@ class GymMemberService:
     ) -> GymMemberData:
         """Record that the member agreed to SMS, or asked to stop."""
 
-        gym = await self._gym_for_manager(user_id=user_id, gym_id=gym_id)
+        gym = await self._gym_for(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.EDIT_MEMBERS
+        )
         member = await self._member(gym, member_id, for_update=True)
         if payload.enabled:
             self._record_consent(member, user_id)
@@ -216,7 +228,9 @@ class GymMemberService:
         same moment cannot claim the same dates.
         """
 
-        gym = await self._gym_for_manager(user_id=user_id, gym_id=gym_id)
+        gym = await self._gym_for(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.TAKE_PAYMENTS
+        )
         member = await self._member(gym, member_id, for_update=True)
         if member.status == GymMemberStatus.ARCHIVED:
             raise GymMemberArchivedError(
@@ -341,14 +355,16 @@ class GymMemberService:
             )
         return requested
 
-    async def _gym_for_manager(self, *, user_id: UUID, gym_id: UUID) -> Gym:
+    async def _gym_for(
+        self, *, user_id: UUID, gym_id: UUID, permission: GymPermission
+    ) -> Gym:
+        """The gym, if the caller's role there allows this action."""
+
         staff = await self.staff.get_user_membership(user_id=user_id, gym_id=gym_id)
         if staff is None:
             raise GymAccessDeniedError("You do not have access to this gym.")
-        if staff.role not in MEMBER_MANAGERS:
-            raise GymAccessDeniedError(
-                "Only the gym's owner or a manager can manage members."
-            )
+        if not role_can(staff.role, permission):
+            raise GymAccessDeniedError(DENIED_MESSAGES[permission])
         gym = await self.gyms.get_by_id(gym_id)
         if gym is None:
             raise GymNotFoundError("The requested gym was not found.")

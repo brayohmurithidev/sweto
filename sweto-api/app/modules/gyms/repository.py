@@ -185,6 +185,64 @@ class GymStaffRepository:
 
         return result.scalar_one_or_none()
 
+    async def get_active_membership_for_user(self, user_id: UUID) -> GymStaff | None:
+        """The gym this person works at: their own first, else where they staff."""
+
+        statement = (
+            select(GymStaff)
+            .where(
+                GymStaff.user_id == user_id,
+                GymStaff.status == GymStaffStatus.ACTIVE,
+            )
+            .order_by(GymStaff.is_primary_owner.desc(), GymStaff.created_at.asc())
+            .limit(1)
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def find_current_for_user(self, user_id: UUID) -> GymStaff | None:
+        """Any place this person still works (active or suspended), any gym."""
+
+        statement = (
+            select(GymStaff)
+            .where(
+                GymStaff.user_id == user_id,
+                GymStaff.status.in_([GymStaffStatus.ACTIVE, GymStaffStatus.SUSPENDED]),
+            )
+            .limit(1)
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def get_for_gym(
+        self, *, gym_id: UUID, staff_id: UUID, for_update: bool = False
+    ) -> GymStaff | None:
+        statement = select(GymStaff).where(
+            GymStaff.id == staff_id, GymStaff.gym_id == gym_id
+        )
+        if for_update:
+            statement = statement.with_for_update()
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def get_any(self, *, gym_id: UUID, user_id: UUID) -> GymStaff | None:
+        """This person's row at this gym in any status, removed included."""
+
+        statement = select(GymStaff).where(
+            GymStaff.gym_id == gym_id, GymStaff.user_id == user_id
+        )
+        return (await self.session.execute(statement)).scalar_one_or_none()
+
+    async def list_for_gym(self, gym_id: UUID) -> Sequence[GymStaff]:
+        """Everyone who works at the gym (removed people are left out)."""
+
+        statement = (
+            select(GymStaff)
+            .where(
+                GymStaff.gym_id == gym_id,
+                GymStaff.status != GymStaffStatus.REMOVED,
+            )
+            .order_by(GymStaff.is_primary_owner.desc(), GymStaff.created_at.asc())
+        )
+        return (await self.session.scalars(statement)).all()
+
     def add(self, membership: GymStaff) -> None:
         self.session.add(membership)
 

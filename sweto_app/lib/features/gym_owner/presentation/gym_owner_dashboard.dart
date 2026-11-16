@@ -9,6 +9,8 @@ import 'package:sweto_app/features/auth/presentation/session_controller.dart';
 import 'package:sweto_app/features/gym_owner/domain/gym_owner_entities.dart';
 import 'package:sweto_app/features/gym_owner/presentation/home/owner_shell.dart';
 import 'package:sweto_app/features/gym_owner/presentation/onboarding_coordinator.dart';
+import 'package:sweto_app/features/staff/domain/staff_entities.dart';
+import 'package:sweto_app/features/staff/presentation/staff_providers.dart';
 import 'package:sweto_app/shared/widgets/sweto_dialog.dart';
 import 'package:sweto_app/shared/widgets/sweto_snackbar.dart';
 
@@ -44,7 +46,9 @@ class _DashboardState extends ConsumerState<GymOwnerDashboardScreen> {
       final gym = await repo.getCurrentGym();
       final onboarding = await repo.getGymOnboarding(gym.id);
       final verification = await repo.getGymVerification(gym.id);
+      final access = await _loadAccess(gym.id);
       if (!mounted) return;
+      ref.read(gymAccessProvider.notifier).set(access);
       setState(() {
         _gym = gym;
         _onboarding = onboarding;
@@ -65,6 +69,16 @@ class _DashboardState extends ConsumerState<GymOwnerDashboardScreen> {
         message: 'Dashboard refresh failed.',
         type: SwetoSnackBarType.error,
       );
+    }
+  }
+
+  /// The person's role here. If it cannot be read, show the owner's view:
+  /// the API still refuses anything their role does not allow.
+  Future<GymAccess> _loadAccess(String gymId) async {
+    try {
+      return await ref.read(staffRepositoryProvider).getMyAccess(gymId);
+    } on Object {
+      return GymAccess.owner;
     }
   }
 
@@ -147,7 +161,10 @@ class _DashboardState extends ConsumerState<GymOwnerDashboardScreen> {
     }
     // Once documents are submitted (pending) or approved there is nothing
     // for the owner to do on the verification step.
-    final canEditVerification = status != 'approved' && status != 'pending';
+    final canEditVerification =
+        status != 'approved' &&
+        status != 'pending' &&
+        ref.watch(gymAccessProvider).can(GymPermission.manageVerification);
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
@@ -292,7 +309,11 @@ class _DashboardState extends ConsumerState<GymOwnerDashboardScreen> {
                 Text(title, style: AppTextStyles.labelMedium),
                 const SizedBox(height: 6),
                 Text(message, style: AppTextStyles.bodySmall),
-                if (!approved && !pending)
+                if (!approved &&
+                    !pending &&
+                    ref
+                        .watch(gymAccessProvider)
+                        .can(GymPermission.manageVerification))
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(

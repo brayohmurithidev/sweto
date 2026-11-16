@@ -13,6 +13,8 @@ import 'package:sweto_app/features/members/presentation/record_cash_payment_shee
 import 'package:sweto_app/shared/widgets/app_primary_button.dart';
 import 'package:sweto_app/shared/widgets/sweto_dialog.dart';
 import 'package:sweto_app/shared/widgets/sweto_snackbar.dart';
+import 'package:sweto_app/features/staff/domain/staff_entities.dart';
+import 'package:sweto_app/features/staff/presentation/staff_providers.dart';
 
 class MemberDetailScreen extends ConsumerStatefulWidget {
   const MemberDetailScreen({
@@ -209,13 +211,15 @@ class _MemberDetailState extends ConsumerState<MemberDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final detail = _detail;
+    final access = ref.watch(gymAccessProvider);
+    final canPay = access.can(GymPermission.takePayments);
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
         backgroundColor: AppColors.background,
         title: const Text('Member'),
         actions: [
-          if (detail != null)
+          if (detail != null && access.can(GymPermission.archiveMembers))
             IconButton(
               key: const Key('member-archive-toggle'),
               tooltip: detail.member.isArchived ? 'Restore' : 'Archive',
@@ -255,32 +259,39 @@ class _MemberDetailState extends ConsumerState<MemberDetailScreen> {
                   const SizedBox(height: AppSpacing.md),
                   if (detail.member.isArchived)
                     Text(
-                      'Archived. Restore this member to record payments.',
+                      access.can(GymPermission.archiveMembers)
+                          ? 'Archived. Restore this member to record payments.'
+                          : 'Archived. Ask the owner or a manager to restore them.',
                       key: const Key('member-archived-note'),
                       style: AppTextStyles.bodySmall.copyWith(
                         color: AppColors.warning,
                       ),
                     )
                   else ...[
-                    AppPrimaryButton(
-                      key: const Key('record-cash-button'),
-                      label: 'Record cash payment',
-                      onPressed: _busy ? null : _recordPayment,
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    SizedBox(
-                      height: 52,
-                      child: OutlinedButton.icon(
-                        key: const Key('request-mpesa-button'),
-                        onPressed: _busy ? null : _requestMpesa,
-                        icon: const Icon(Icons.phone_android),
-                        label: const Text('Request M-Pesa payment'),
+                    if (canPay) ...[
+                      AppPrimaryButton(
+                        key: const Key('record-cash-button'),
+                        label: 'Record cash payment',
+                        onPressed: _busy ? null : _recordPayment,
                       ),
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    _checkInCodeCard(detail.member),
-                    const SizedBox(height: AppSpacing.sm),
-                    _smsCard(detail.member),
+                      const SizedBox(height: AppSpacing.xs),
+                      SizedBox(
+                        height: 52,
+                        child: OutlinedButton.icon(
+                          key: const Key('request-mpesa-button'),
+                          onPressed: _busy ? null : _requestMpesa,
+                          icon: const Icon(Icons.phone_android),
+                          label: const Text('Request M-Pesa payment'),
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+                    ],
+                    if (access.can(GymPermission.issueCheckInCodes)) ...[
+                      _checkInCodeCard(detail.member),
+                      const SizedBox(height: AppSpacing.sm),
+                    ],
+                    if (access.can(GymPermission.editMembers))
+                      _smsCard(detail.member),
                   ],
                   const SizedBox(height: AppSpacing.lg),
                   Text('Membership history', style: AppTextStyles.titleLarge),

@@ -197,9 +197,21 @@ async def test_owner_registers_document_with_authenticated_uploader() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("role", [GymStaffRole.MANAGER, GymStaffRole.OWNER])
-async def test_owner_or_manager_can_register_document(role: GymStaffRole) -> None:
+async def test_only_the_owner_can_register_document() -> None:
     current_gym = gym()
+    verification_service = service()
+    verification_service.staff_repository.get_user_membership = AsyncMock(
+        return_value=SimpleNamespace(role=GymStaffRole.MANAGER)
+    )
+    with pytest.raises(GymVerificationAccessDeniedError):
+        await verification_service.create_verification_document(
+            user_id=uuid4(),
+            gym_id=current_gym.id,
+            document_type=GymVerificationDocumentType.OWNER_IDENTIFICATION,
+            payload=payload(),
+        )
+
+    role = GymStaffRole.OWNER
     verification_service = service()
     verification_service.staff_repository.get_user_membership = AsyncMock(
         return_value=SimpleNamespace(role=role)
@@ -329,7 +341,7 @@ async def test_duplicate_and_approved_submission_are_rejected() -> None:
         current_gym = gym(status)
         verification_service = service()
         verification_service.staff_repository.get_user_membership = AsyncMock(
-            return_value=SimpleNamespace(role=GymStaffRole.MANAGER)
+            return_value=SimpleNamespace(role=GymStaffRole.OWNER)
         )
         verification_service.gym_repository.get_by_id_for_update = AsyncMock(
             return_value=current_gym

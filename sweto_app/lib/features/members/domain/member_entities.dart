@@ -293,9 +293,13 @@ class DashboardSummary {
     required this.recentActivity,
     this.ownerFirstName,
     this.revenueChangePercent,
+    this.showsRevenue = true,
   });
 
   final String gymName;
+
+  /// False for roles that may not see the gym's money: no revenue card.
+  final bool showsRevenue;
   final String? ownerFirstName;
   final int activeMembers;
   final int expiringMembers;

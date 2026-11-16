@@ -55,6 +55,7 @@ from app.modules.gyms.models import (
     GymVerificationDocument,
     GymVerificationReview,
 )
+from app.modules.gyms.permissions import DENIED_MESSAGES, GymPermission, role_can
 from app.modules.gyms.photo_upload import GymPhotoUploadPurpose
 from app.modules.gyms.repository import (
     AmenityRepository,
@@ -183,6 +184,10 @@ class GymService:
             raise GymAlreadyExistsError(
                 "You already have a gym registered as primary owner."
             )
+        if await self.staff_repository.find_current_for_user(user.id) is not None:
+            raise GymAlreadyExistsError(
+                "This account already works at a gym, so it cannot register one."
+            )
 
         slug = await self._generate_unique_slug(payload.name)
 
@@ -239,7 +244,8 @@ class GymService:
         *,
         user_id: UUID,
     ) -> GymData:
-        membership = await self.staff_repository.get_primary_owner_membership(user_id)
+        # The owner's own gym, or the one they work at as staff.
+        membership = await self.staff_repository.get_active_membership_for_user(user_id)
 
         if membership is None:
             raise GymNotFoundError("No gym is associated with this account.")
@@ -257,13 +263,9 @@ class GymService:
         user_id: UUID,
         gym_id: UUID,
     ) -> GymOnboardingData:
-        membership = await self.staff_repository.get_user_membership(
-            user_id=user_id,
-            gym_id=gym_id,
+        await self._require(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.VIEW_GYM
         )
-
-        if membership is None:
-            raise GymAccessDeniedError("You do not have access to this gym.")
 
         gym = await self.gym_repository.get_by_id(gym_id)
 
@@ -422,14 +424,9 @@ class GymService:
     ) -> UpdateGymBasicInformationData:
         """Update registration details without advancing onboarding."""
 
-        membership = await self.staff_repository.get_user_membership(
-            user_id=user_id,
-            gym_id=gym_id,
+        await self._require(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.EDIT_GYM
         )
-        if membership is None:
-            raise GymAccessDeniedError("You do not have access to this gym.")
-        if membership.role not in {GymStaffRole.OWNER, GymStaffRole.MANAGER}:
-            raise GymAccessDeniedError("You do not have permission to update this gym.")
 
         gym = await self.gym_repository.get_by_id_for_update(gym_id)
         if gym is None:
@@ -469,19 +466,9 @@ class GymService:
     ) -> UpdateGymLocationData:
         """Save gym location and advance the onboarding workflow."""
 
-        membership = await self.staff_repository.get_user_membership(
-            user_id=user_id,
-            gym_id=gym_id,
+        await self._require(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.EDIT_GYM
         )
-
-        if membership is None:
-            raise GymAccessDeniedError("You do not have access to this gym.")
-
-        if membership.role not in {
-            GymStaffRole.OWNER,
-            GymStaffRole.MANAGER,
-        }:
-            raise GymAccessDeniedError("You do not have permission to update this gym.")
 
         gym = await self.gym_repository.get_by_id_for_update(gym_id)
 
@@ -521,19 +508,9 @@ class GymService:
     ) -> UpdateGymBusinessDetailsData:
         """Save legal business details and advance onboarding."""
 
-        membership = await self.staff_repository.get_user_membership(
-            user_id=user_id,
-            gym_id=gym_id,
+        await self._require(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.MANAGE_VERIFICATION
         )
-
-        if membership is None:
-            raise GymAccessDeniedError("You do not have access to this gym.")
-
-        if membership.role not in {
-            GymStaffRole.OWNER,
-            GymStaffRole.MANAGER,
-        }:
-            raise GymAccessDeniedError("You do not have permission to update this gym.")
 
         gym = await self.gym_repository.get_by_id_for_update(gym_id)
 
@@ -587,11 +564,9 @@ class GymService:
     async def list_gym_amenities(
         self, *, user_id: UUID, gym_id: UUID
     ) -> list[AmenityData]:
-        membership = await self.staff_repository.get_user_membership(
-            user_id=user_id, gym_id=gym_id
+        await self._require(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.VIEW_GYM
         )
-        if membership is None:
-            raise GymAccessDeniedError("You do not have access to this gym.")
         gym = await self.gym_repository.get_by_id(gym_id)
         if gym is None:
             raise GymNotFoundError("The requested gym was not found.")
@@ -607,19 +582,9 @@ class GymService:
     ) -> UpdateGymAmenitiesData:
         """Replace selected amenities and advance onboarding."""
 
-        membership = await self.staff_repository.get_user_membership(
-            user_id=user_id,
-            gym_id=gym_id,
+        await self._require(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.EDIT_GYM
         )
-
-        if membership is None:
-            raise GymAccessDeniedError("You do not have access to this gym.")
-
-        if membership.role not in {
-            GymStaffRole.OWNER,
-            GymStaffRole.MANAGER,
-        }:
-            raise GymAccessDeniedError("You do not have permission to update this gym.")
 
         gym = await self.gym_repository.get_by_id_for_update(gym_id)
 
@@ -684,13 +649,9 @@ class GymService:
     ) -> list[GymOperatingHoursData]:
         """Return the current weekly gym schedule."""
 
-        membership = await self.staff_repository.get_user_membership(
-            user_id=user_id,
-            gym_id=gym_id,
+        await self._require(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.VIEW_GYM
         )
-
-        if membership is None:
-            raise GymAccessDeniedError("You do not have access to this gym.")
 
         schedules = await self.operating_hours_repository.list_by_gym_id(gym_id)
 
@@ -705,19 +666,9 @@ class GymService:
     ) -> UpdateGymOperatingHoursData:
         """Replace weekly operating hours and advance onboarding."""
 
-        membership = await self.staff_repository.get_user_membership(
-            user_id=user_id,
-            gym_id=gym_id,
+        await self._require(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.EDIT_GYM
         )
-
-        if membership is None:
-            raise GymAccessDeniedError("You do not have access to this gym.")
-
-        if membership.role not in {
-            GymStaffRole.OWNER,
-            GymStaffRole.MANAGER,
-        }:
-            raise GymAccessDeniedError("You do not have permission to update this gym.")
 
         gym = await self.gym_repository.get_by_id_for_update(gym_id)
 
@@ -780,13 +731,9 @@ class GymService:
     ) -> GymPricingData:
         """Return the gym's current pricing options."""
 
-        membership = await self.staff_repository.get_user_membership(
-            user_id=user_id,
-            gym_id=gym_id,
+        await self._require(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.VIEW_GYM
         )
-
-        if membership is None:
-            raise GymAccessDeniedError("You do not have access to this gym.")
 
         day_passes = await self.pricing_repository.list_day_passes(gym_id)
 
@@ -809,19 +756,9 @@ class GymService:
     ) -> UpdateGymPricingData:
         """Replace gym pricing and advance onboarding."""
 
-        membership = await self.staff_repository.get_user_membership(
-            user_id=user_id,
-            gym_id=gym_id,
+        await self._require(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.EDIT_GYM
         )
-
-        if membership is None:
-            raise GymAccessDeniedError("You do not have access to this gym.")
-
-        if membership.role not in {
-            GymStaffRole.OWNER,
-            GymStaffRole.MANAGER,
-        }:
-            raise GymAccessDeniedError("You do not have permission to update this gym.")
 
         gym = await self.gym_repository.get_by_id_for_update(gym_id)
 
@@ -925,23 +862,12 @@ class GymService:
     ) -> GymVerificationDocumentData:
         """Register or replace a verification document."""
 
-        membership = await self.staff_repository.get_user_membership(
+        await self._require(
             user_id=user_id,
             gym_id=gym_id,
+            permission=GymPermission.MANAGE_VERIFICATION,
+            error=GymVerificationAccessDeniedError,
         )
-
-        if membership is None:
-            raise GymVerificationAccessDeniedError(
-                "You do not have access to this gym verification."
-            )
-
-        if membership.role not in {
-            GymStaffRole.OWNER,
-            GymStaffRole.MANAGER,
-        }:
-            raise GymVerificationAccessDeniedError(
-                "Only an owner or manager may update verification documents."
-            )
 
         gym = await self.gym_repository.get_by_id_for_update(gym_id)
 
@@ -1055,14 +981,9 @@ class GymService:
         gym_id: UUID,
         payload: GymPhotoUploadRequest,
     ) -> GymPhotoUploadData:
-        membership = await self.staff_repository.get_user_membership(
-            user_id=user_id, gym_id=gym_id
+        await self._require(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.EDIT_GYM
         )
-        if membership is None or membership.role not in {
-            GymStaffRole.OWNER,
-            GymStaffRole.MANAGER,
-        }:
-            raise GymAccessDeniedError("You do not have permission to update this gym.")
         gym = await self.gym_repository.get_by_id_for_update(gym_id)
         if gym is None:
             raise GymNotFoundError("The requested gym was not found.")
@@ -1115,14 +1036,9 @@ class GymService:
         gym_id: UUID,
         upload_id: UUID,
     ) -> GymPhotoUploadCompletionData:
-        membership = await self.staff_repository.get_user_membership(
-            user_id=user_id, gym_id=gym_id
+        await self._require(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.EDIT_GYM
         )
-        if membership is None or membership.role not in {
-            GymStaffRole.OWNER,
-            GymStaffRole.MANAGER,
-        }:
-            raise GymAccessDeniedError("You do not have permission to update this gym.")
         gym = await self.gym_repository.get_by_id_for_update(gym_id)
         if gym is None:
             raise GymNotFoundError("The requested gym was not found.")
@@ -1189,14 +1105,9 @@ class GymService:
         )
 
     async def list_gym_photos(self, *, user_id: UUID, gym_id: UUID) -> GymPhotoListData:
-        membership = await self.staff_repository.get_user_membership(
-            user_id=user_id, gym_id=gym_id
+        await self._require(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.VIEW_GYM
         )
-        if membership is None or membership.role not in {
-            GymStaffRole.OWNER,
-            GymStaffRole.MANAGER,
-        }:
-            raise GymAccessDeniedError("You do not have permission to view this gym.")
         gym = await self.gym_repository.get_by_id(gym_id)
         if gym is None:
             raise GymNotFoundError("The requested gym was not found.")
@@ -1223,14 +1134,9 @@ class GymService:
     async def delete_gym_photo(
         self, *, user_id: UUID, gym_id: UUID, photo_id: UUID
     ) -> GymPhotoDeleteData:
-        membership = await self.staff_repository.get_user_membership(
-            user_id=user_id, gym_id=gym_id
+        await self._require(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.EDIT_GYM
         )
-        if membership is None or membership.role not in {
-            GymStaffRole.OWNER,
-            GymStaffRole.MANAGER,
-        }:
-            raise GymAccessDeniedError("You do not have permission to update this gym.")
         gym = await self.gym_repository.get_by_id_for_update(gym_id)
         if gym is None:
             raise GymNotFoundError("The requested gym was not found.")
@@ -1463,19 +1369,35 @@ class GymService:
                 "The document file size is invalid."
             )
 
-    async def _require_verification_manager(
-        self, *, user_id: UUID, gym_id: UUID, lock: bool
-    ) -> Gym:
+    async def _require(
+        self,
+        *,
+        user_id: UUID,
+        gym_id: UUID,
+        permission: GymPermission,
+        error: type[GymAccessDeniedError]
+        | type[GymVerificationAccessDeniedError] = GymAccessDeniedError,
+    ) -> GymStaff:
+        """The caller's active staff membership, if their role allows this."""
+
         membership = await self.staff_repository.get_user_membership(
             user_id=user_id, gym_id=gym_id
         )
-        if membership is None or membership.role not in {
-            GymStaffRole.OWNER,
-            GymStaffRole.MANAGER,
-        }:
-            raise GymVerificationAccessDeniedError(
-                "Only an owner or manager may manage verification documents."
-            )
+        if membership is None:
+            raise error("You do not have access to this gym.")
+        if not role_can(membership.role, permission):
+            raise error(DENIED_MESSAGES[permission])
+        return membership
+
+    async def _require_verification_manager(
+        self, *, user_id: UUID, gym_id: UUID, lock: bool
+    ) -> Gym:
+        await self._require(
+            user_id=user_id,
+            gym_id=gym_id,
+            permission=GymPermission.MANAGE_VERIFICATION,
+            error=GymVerificationAccessDeniedError,
+        )
         gym = await (
             self.gym_repository.get_by_id_for_update(gym_id)
             if lock
@@ -1508,11 +1430,10 @@ class GymService:
         )
 
         is_platform_reviewer = user.role in {UserRole.ADMIN, UserRole.SUPER_ADMIN}
-        is_owner_or_manager = membership is not None and membership.role in {
-            GymStaffRole.OWNER,
-            GymStaffRole.MANAGER,
-        }
-        if not is_platform_reviewer and not is_owner_or_manager:
+        can_view = membership is not None and role_can(
+            membership.role, GymPermission.VIEW_GYM
+        )
+        if not is_platform_reviewer and not can_view:
             raise GymVerificationAccessDeniedError(
                 "You do not have access to this gym verification."
             )
@@ -1532,23 +1453,12 @@ class GymService:
     ) -> GymVerificationData:
         """Submit the gym for administrative verification."""
 
-        membership = await self.staff_repository.get_user_membership(
+        await self._require(
             user_id=user_id,
             gym_id=gym_id,
+            permission=GymPermission.MANAGE_VERIFICATION,
+            error=GymVerificationAccessDeniedError,
         )
-
-        if membership is None:
-            raise GymVerificationAccessDeniedError(
-                "You do not have access to this gym."
-            )
-
-        if membership.role not in {
-            GymStaffRole.OWNER,
-            GymStaffRole.MANAGER,
-        }:
-            raise GymVerificationAccessDeniedError(
-                "You do not have permission to submit this gym."
-            )
 
         gym = await self.gym_repository.get_by_id_for_update(gym_id)
 

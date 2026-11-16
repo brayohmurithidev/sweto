@@ -14,6 +14,7 @@ from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.modules.gyms.permissions import GymPermission
 from app.modules.members.enums import (
     PaymentMethod,
     PaymentStatus,
@@ -65,7 +66,9 @@ class FinanceService:
     async def summary(
         self, *, user_id: UUID, gym_id: UUID, month: date | None
     ) -> FinanceSummaryData:
-        gym = await self.members._gym_for_manager(user_id=user_id, gym_id=gym_id)
+        gym = await self.members._gym_for(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.VIEW_FINANCE
+        )
         zone = ZoneInfo(gym.timezone)
         today = self.members._today(gym)
         month_start, through = self._span(month, today)
@@ -162,7 +165,9 @@ class FinanceService:
         limit: int,
         offset: int,
     ) -> FinanceTransactionListData:
-        gym = await self.members._gym_for_manager(user_id=user_id, gym_id=gym_id)
+        gym = await self.members._gym_for(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.VIEW_FINANCE
+        )
         zone = ZoneInfo(gym.timezone)
         month_start, through = self._span(month, self.members._today(gym))
 

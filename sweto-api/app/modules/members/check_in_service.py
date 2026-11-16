@@ -12,6 +12,7 @@ from app.core.config import Settings
 from app.modules.auth.exceptions import AuthenticationRateLimitError
 from app.modules.gyms.exceptions import GymAccessDeniedError, GymNotFoundError
 from app.modules.gyms.models import Gym
+from app.modules.gyms.permissions import DENIED_MESSAGES, GymPermission, role_can
 from app.modules.gyms.repository import GymRepository, GymStaffRepository
 from app.modules.members.codes import (
     display_code,
@@ -39,7 +40,7 @@ from app.modules.members.schemas import (
     CheckInMemberData,
     CheckInMembershipData,
 )
-from app.modules.members.service import MEMBER_MANAGERS, standing_for
+from app.modules.members.service import standing_for
 from app.rate_limit.base import RateLimiter
 from app.shared.clock import Clock
 
@@ -76,7 +77,11 @@ class CheckInService:
     ) -> CheckInCodeData:
         """Give the member a new code; the previous one stops working."""
 
-        gym = await self._gym_for_staff(user_id=user_id, gym_id=gym_id, managers=True)
+        gym = await self._gym_for_staff(
+            user_id=user_id,
+            gym_id=gym_id,
+            permission=GymPermission.ISSUE_CHECK_IN_CODES,
+        )
         for attempt in range(_CODE_ATTEMPTS):
             member = await self._member(gym, member_id)
             if member.status == GymMemberStatus.ARCHIVED:
@@ -109,7 +114,9 @@ class CheckInService:
     async def check_in(
         self, *, user_id: UUID, gym_id: UUID, raw_code: str
     ) -> CheckInData:
-        gym = await self._gym_for_staff(user_id=user_id, gym_id=gym_id, managers=False)
+        gym = await self._gym_for_staff(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.CHECK_IN
+        )
         await self._enforce_rate_limit(gym.id)
 
         now = self.clock()
@@ -175,7 +182,9 @@ class CheckInService:
     async def day(
         self, *, user_id: UUID, gym_id: UUID, day: date | None
     ) -> CheckInDayData:
-        gym = await self._gym_for_staff(user_id=user_id, gym_id=gym_id, managers=False)
+        gym = await self._gym_for_staff(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.CHECK_IN
+        )
         local_day = day or self.clock().astimezone(ZoneInfo(gym.timezone)).date()
         start, end = local_day_bounds(local_day, gym.timezone)
         rows = (
@@ -320,15 +329,13 @@ class CheckInService:
         return hash_code(code, secret=self.settings.otp_hash_secret)
 
     async def _gym_for_staff(
-        self, *, user_id: UUID, gym_id: UUID, managers: bool
+        self, *, user_id: UUID, gym_id: UUID, permission: GymPermission
     ) -> Gym:
         staff = await self.staff.get_user_membership(user_id=user_id, gym_id=gym_id)
         if staff is None:
             raise GymAccessDeniedError("You do not have access to this gym.")
-        if managers and staff.role not in MEMBER_MANAGERS:
-            raise GymAccessDeniedError(
-                "Only the gym's owner or a manager can issue check-in codes."
-            )
+        if not role_can(staff.role, permission):
+            raise GymAccessDeniedError(DENIED_MESSAGES[permission])
         gym = await self.gyms.get_by_id(gym_id)
         if gym is None:
             raise GymNotFoundError("The requested gym was not found.")

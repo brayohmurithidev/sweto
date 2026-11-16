@@ -62,6 +62,10 @@ class ApiEndpoints {
       '${gymMember(gymId, memberId)}/check-in-code';
   static String gymCheckIns(String gymId) => '$gyms/$gymId/check-ins';
   static String gymDashboard(String gymId) => '$gyms/$gymId/dashboard';
+  static String gymStaff(String gymId) => '$gyms/$gymId/staff';
+  static String gymStaffMe(String gymId) => '$gyms/$gymId/staff/me';
+  static String gymStaffMember(String gymId, String staffId) =>
+      '$gyms/$gymId/staff/$staffId';
   static String gymMpesaAccount(String gymId) => '$gyms/$gymId/mpesa-account';
   static String gymFinance(String gymId) => '$gyms/$gymId/finance';
   static String gymFinanceTransactions(String gymId) =>

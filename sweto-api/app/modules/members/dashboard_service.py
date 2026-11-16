@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import Date, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.gyms.permissions import GymPermission, role_can
 from app.modules.members.enums import (
     CheckInResult,
     GymMemberStatus,
@@ -39,7 +40,9 @@ class DashboardService:
         self.members = members
 
     async def summary(self, *, user_id: UUID, gym_id: UUID) -> DashboardData:
-        gym = await self.members._gym_for_manager(user_id=user_id, gym_id=gym_id)
+        gym = await self.members._gym_for(
+            user_id=user_id, gym_id=gym_id, permission=GymPermission.VIEW_MEMBERS
+        )
         zone = ZoneInfo(gym.timezone)
         today = self.members._today(gym)
         month_start = today.replace(day=1)
@@ -78,8 +81,14 @@ class DashboardService:
             or 0
         )
 
-        revenue = await self._revenue(
-            gym.id, zone, today, month_start, last_month_start
+        # Revenue is only for roles that may see the gym's finances.
+        staff = await self.members.staff.get_user_membership(
+            user_id=user_id, gym_id=gym.id
+        )
+        revenue = (
+            await self._revenue(gym.id, zone, today, month_start, last_month_start)
+            if staff is not None and role_can(staff.role, GymPermission.VIEW_FINANCE)
+            else None
         )
         first_name = await self._first_name(user_id)
         return DashboardData(
