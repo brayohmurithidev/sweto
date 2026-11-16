@@ -190,14 +190,18 @@ class _StaffTile extends StatelessWidget {
               CircleAvatar(
                 radius: 20,
                 backgroundColor: AppColors.primary.withValues(alpha: 0.15),
-                child: Text(
-                  member.displayName.isEmpty
-                      ? '?'
-                      : member.displayName[0].toUpperCase(),
-                  style: AppTextStyles.labelMedium.copyWith(
-                    color: AppColors.primary,
-                  ),
-                ),
+                child: (member.fullName?.trim().isNotEmpty ?? false)
+                    ? Text(
+                        member.fullName!.trim()[0].toUpperCase(),
+                        style: AppTextStyles.labelMedium.copyWith(
+                          color: AppColors.primary,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.person_outline,
+                        size: 20,
+                        color: AppColors.primary,
+                      ),
               ),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
@@ -217,7 +221,9 @@ class _StaffTile extends StatelessWidget {
                     Text(
                       [
                         member.role.label,
-                        if (member.phoneNumber != null) member.phoneNumber!,
+                        if (member.phoneNumber != null &&
+                            member.displayName != member.phoneNumber)
+                          member.phoneNumber!,
                       ].join(' · '),
                       style: AppTextStyles.bodySmall,
                     ),
@@ -399,6 +405,8 @@ class _AddStaffSheetState extends ConsumerState<_AddStaffSheet> {
               key: const Key('staff-name-field'),
               controller: _name,
               textCapitalization: TextCapitalization.words,
+              // Names like Wanjiku must not be "corrected".
+              autocorrect: false,
               decoration: const InputDecoration(labelText: 'Full name'),
             ),
             const SizedBox(height: AppSpacing.sm),
