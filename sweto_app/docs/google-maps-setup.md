@@ -41,9 +41,9 @@ A fresh checkout, CI or a new machine has no key until you add the files above.
 Before building for TestFlight, the App Store or Play:
 
 - `ios/Flutter/GoogleMaps.local.xcconfig` has `GMS_API_KEY` (iOS key,
-  restricted to the bundle ID `com.fazilabs.swetoApp`);
+  restricted to the bundle ID `com.fazilabs.sweto`);
 - `android/local.properties` has `MAPS_API_KEY` (Android key, restricted to
-  `com.fazilabs.sweto_app` and the release signing certificate);
+  `com.fazilabs.sweto` and the release signing certificate);
 - open the Location step once on the built app and see the map.
 
 Use separate keys for release builds, not the ones on developer machines.

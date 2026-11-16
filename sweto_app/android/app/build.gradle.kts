@@ -19,7 +19,7 @@ if (localPropertiesFile.exists()) {
 val mapsApiKey = localProperties.getProperty("MAPS_API_KEY") ?: ""
 
 android {
-    namespace = "com.fazilabs.sweto_app"
+    namespace = "com.fazilabs.sweto"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -31,7 +31,7 @@ android {
     defaultConfig {
         manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
 
-        applicationId = "com.fazilabs.sweto_app"
+        applicationId = "com.fazilabs.sweto"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
