@@ -10,6 +10,7 @@ import 'package:sweto_app/core/router/app_routes.dart';
 import 'package:sweto_app/core/theme/colors.dart';
 import 'package:sweto_app/core/theme/spacing.dart';
 import 'package:sweto_app/core/theme/text_styles.dart';
+import 'package:sweto_app/features/auth/data/otp_sms_reader.dart';
 import 'package:sweto_app/features/auth/domain/entities/auth_entities.dart';
 import 'package:sweto_app/features/auth/presentation/auth_providers.dart';
 import 'package:sweto_app/shared/widgets/app_primary_button.dart';
@@ -62,6 +63,41 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
       if (mounted) setState(() {});
     });
     _watchDelivery();
+    unawaited(_listenForSms());
+  }
+
+  /// On Android, offers to read the code from the SMS when it arrives, then
+  /// fills it in and verifies, as if typed. Only for codes sent by SMS:
+  /// a WhatsApp code never arrives as one.
+  Future<void> _listenForSms() async {
+    if (_challenge.deliveryChannel != OtpDeliveryChannel.sms) return;
+    final challengeId = _challenge.challengeId;
+    final reader = ref.read(otpSmsReaderProvider);
+    _smsReader = reader;
+    final String? code;
+    try {
+      code = await reader.waitForCode();
+    } catch (_) {
+      return; // Typing the code still works.
+    }
+    if (code == null || code.length != 6) return;
+    if (!mounted || challengeId != _challenge.challengeId || _verifying) {
+      return;
+    }
+    _controller.value = TextEditingValue(
+      text: code,
+      selection: TextSelection.collapsed(offset: code.length),
+    );
+    _changed(code);
+  }
+
+  OtpSmsReader? _smsReader;
+
+  Future<void> _restartSmsListener() async {
+    try {
+      await _smsReader?.stop();
+    } catch (_) {}
+    if (mounted) unawaited(_listenForSms());
   }
 
   /// Waits between delivery checks: quick at first, when a failure is
@@ -123,6 +159,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
 
   @override
   void dispose() {
+    unawaited(_smsReader?.stop());
     _timer?.cancel();
     _deliveryTimer?.cancel();
     _shakeController.dispose();
@@ -227,6 +264,7 @@ class _OtpVerificationScreenState extends ConsumerState<OtpVerificationScreen>
         _delivery = OtpDeliveryStatus.accepted;
       });
       _watchDelivery();
+      unawaited(_restartSmsListener());
     } on DioException catch (e) {
       final apiError = e.error;
       if (mounted) {
