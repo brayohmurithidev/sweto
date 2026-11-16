@@ -209,6 +209,8 @@ class FakeMembers implements MembersRepository {
     required String shortcode,
     String? tillNumber,
     String? passkey,
+    String? consumerKey,
+    String? consumerSecret,
   }) async {
     if (tillError != null) throw tillError!;
     tillSaves.add({
@@ -216,6 +218,8 @@ class FakeMembers implements MembersRepository {
       'shortcode': shortcode,
       'tillNumber': tillNumber,
       'passkey': passkey,
+      'consumerKey': consumerKey,
+      'consumerSecret': consumerSecret,
     });
     return till = MpesaTill(
       configured: true,
@@ -224,6 +228,7 @@ class FakeMembers implements MembersRepository {
       shortcode: shortcode,
       tillNumber: tillNumber,
       passkeySaved: true,
+      appKeysSaved: consumerKey != null || till.appKeysSaved,
     );
   }
 

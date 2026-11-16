@@ -65,5 +65,7 @@ abstract interface class MembersRepository {
     required String shortcode,
     String? tillNumber,
     String? passkey,
+    String? consumerKey,
+    String? consumerSecret,
   });
 }

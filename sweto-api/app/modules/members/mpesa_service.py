@@ -184,6 +184,11 @@ class MpesaPaymentService:
                 isinstance(error, MpesaError) and error.outcome_unknown
             )
             await self._fail(payment, membership, transaction, None, reason)
+            if reason in {"unauthorized", "not_configured"}:
+                raise MpesaRequestFailedError(
+                    "M-Pesa didn't accept this gym's Daraja keys. The owner can "
+                    "check them in More → M-Pesa till."
+                ) from error
             raise MpesaRequestFailedError(
                 "M-Pesa didn't answer. Ask the member whether a prompt appeared "
                 "before trying again."

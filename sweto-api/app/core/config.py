@@ -225,10 +225,19 @@ class Settings(BaseSettings):
         if self.mpesa_mode == "sandbox" and self.app_environment == "production":
             raise ValueError("MPESA_MODE=sandbox isn't allowed in production.")
         if self.mpesa_mode in {"sandbox", "production"}:
-            missing = _missing(
+            # In production each gym brings its own Daraja app, so SWETO's
+            # keys are optional there; the sandbox needs them.
+            app_keys = (
                 {
                     "MPESA_CONSUMER_KEY": self.mpesa_consumer_key,
                     "MPESA_CONSUMER_SECRET": self.mpesa_consumer_secret,
+                }
+                if self.mpesa_mode == "sandbox"
+                else {}
+            )
+            missing = _missing(
+                {
+                    **app_keys,
                     "MPESA_CREDENTIALS_KEY": self.mpesa_credentials_key,
                     "MPESA_CALLBACK_BASE_URL": self.mpesa_callback_base_url,
                     "MPESA_CALLBACK_TOKEN": self.mpesa_callback_token,
