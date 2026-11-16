@@ -26,14 +26,18 @@ class _MpesaTillScreenState extends ConsumerState<MpesaTillScreen> {
   final _shortcode = TextEditingController();
   final _tillNumber = TextEditingController();
   final _passkey = TextEditingController();
+  final _consumerKey = TextEditingController();
+  final _consumerSecret = TextEditingController();
   MpesaTill? _saved;
   bool _isTill = true;
   bool _saving = false;
   bool _showPasskey = false;
+  bool _showSecret = false;
   String? _loadError;
   String? _shortcodeError;
   String? _tillError;
   String? _passkeyError;
+  String? _keysError;
   String? _error;
 
   @override
@@ -47,6 +51,8 @@ class _MpesaTillScreenState extends ConsumerState<MpesaTillScreen> {
     _shortcode.dispose();
     _tillNumber.dispose();
     _passkey.dispose();
+    _consumerKey.dispose();
+    _consumerSecret.dispose();
     super.dispose();
   }
 
@@ -73,7 +79,16 @@ class _MpesaTillScreenState extends ConsumerState<MpesaTillScreen> {
   bool _validate() {
     final saved = _saved;
     final passkey = _passkey.text.trim();
+    final key = _consumerKey.text.trim();
+    final secret = _consumerSecret.text.trim();
     setState(() {
+      _keysError = (key.isEmpty) != (secret.isEmpty)
+          ? 'Enter both the consumer key and the consumer secret.'
+          : key.isEmpty &&
+                (saved?.isLive ?? false) &&
+                !(saved?.appKeysSaved ?? false)
+          ? 'Enter the consumer key and secret from your Daraja app.'
+          : null;
       _error = null;
       _shortcodeError = _digits.hasMatch(_shortcode.text.trim())
           ? null
@@ -91,7 +106,8 @@ class _MpesaTillScreenState extends ConsumerState<MpesaTillScreen> {
     });
     return _shortcodeError == null &&
         _tillError == null &&
-        _passkeyError == null;
+        _passkeyError == null &&
+        _keysError == null;
   }
 
   Future<void> _save() async {
@@ -99,6 +115,8 @@ class _MpesaTillScreenState extends ConsumerState<MpesaTillScreen> {
     setState(() => _saving = true);
     try {
       final passkey = _passkey.text.trim();
+      final key = _consumerKey.text.trim();
+      final secret = _consumerSecret.text.trim();
       final till = await ref
           .read(membersRepositoryProvider)
           .saveMpesaTill(
@@ -107,9 +125,13 @@ class _MpesaTillScreenState extends ConsumerState<MpesaTillScreen> {
             shortcode: _shortcode.text.trim(),
             tillNumber: _isTill ? _tillNumber.text.trim() : null,
             passkey: passkey.isEmpty ? null : passkey,
+            consumerKey: key.isEmpty ? null : key,
+            consumerSecret: secret.isEmpty ? null : secret,
           );
       if (!mounted) return;
       _passkey.clear();
+      _consumerKey.clear();
+      _consumerSecret.clear();
       setState(() {
         _saved = till;
         _saving = false;
@@ -209,6 +231,37 @@ class _MpesaTillScreenState extends ConsumerState<MpesaTillScreen> {
                       label: 'Till number',
                       error: _tillError,
                     ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text(
+                    'Your gym\'s Daraja app',
+                    style: AppTextStyles.titleLarge,
+                  ),
+                  const SizedBox(height: AppSpacing.xs),
+                  _DarajaSteps(
+                    key: const ValueKey('daraja-steps'),
+                    isTill: _isTill,
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  _secretField(
+                    key: 'till-consumer-key',
+                    controller: _consumerKey,
+                    label: saved.appKeysSaved
+                        ? 'Consumer key (saved)'
+                        : 'Consumer key',
+                    saved: saved.appKeysSaved,
+                    obscure: false,
+                  ),
+                  _secretField(
+                    key: 'till-consumer-secret',
+                    controller: _consumerSecret,
+                    label: saved.appKeysSaved
+                        ? 'Consumer secret (saved)'
+                        : 'Consumer secret',
+                    saved: saved.appKeysSaved,
+                    obscure: !_showSecret,
+                    error: _keysError,
+                    onToggle: () => setState(() => _showSecret = !_showSecret),
+                  ),
                   TextField(
                     key: const Key('till-passkey'),
                     controller: _passkey,
@@ -239,9 +292,8 @@ class _MpesaTillScreenState extends ConsumerState<MpesaTillScreen> {
                   ),
                   const SizedBox(height: AppSpacing.xs),
                   Text(
-                    'Safaricom gives you the passkey when your shortcode is '
-                    'linked to SWETO. It\'s stored encrypted and never shown '
-                    'again.',
+                    'Your Daraja app shows the passkey after go-live. The keys '
+                    'and passkey are stored encrypted and never shown again.',
                     style: AppTextStyles.bodySmall,
                   ),
                   if (_error != null) ...[
@@ -265,6 +317,35 @@ class _MpesaTillScreenState extends ConsumerState<MpesaTillScreen> {
             ),
     );
   }
+
+  Widget _secretField({
+    required String key,
+    required TextEditingController controller,
+    required String label,
+    required bool saved,
+    required bool obscure,
+    String? error,
+    VoidCallback? onToggle,
+  }) => Padding(
+    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+    child: TextField(
+      key: Key(key),
+      controller: controller,
+      obscureText: obscure,
+      autocorrect: false,
+      enableSuggestions: false,
+      decoration: _decoration(label, error).copyWith(
+        hintText: saved ? 'Leave empty to keep it' : null,
+        suffixIcon: onToggle == null
+            ? null
+            : IconButton(
+                tooltip: obscure ? 'Show' : 'Hide',
+                icon: Icon(obscure ? Icons.visibility : Icons.visibility_off),
+                onPressed: onToggle,
+              ),
+      ),
+    ),
+  );
 
   Widget _field({
     required String key,
@@ -293,6 +374,61 @@ class _MpesaTillScreenState extends ConsumerState<MpesaTillScreen> {
     border: OutlineInputBorder(
       borderRadius: BorderRadius.circular(AppRadius.md),
       borderSide: const BorderSide(color: AppColors.border),
+    ),
+  );
+}
+
+/// How a gym gets its own Daraja app keys, as Safaricom describes it.
+class _DarajaSteps extends StatelessWidget {
+  const _DarajaSteps({required this.isTill, super.key});
+  final bool isTill;
+
+  @override
+  Widget build(BuildContext context) => Material(
+    key: const Key('till-daraja-steps'),
+    color: AppColors.surface,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(AppRadius.md),
+      side: const BorderSide(color: AppColors.border),
+    ),
+    clipBehavior: Clip.antiAlias,
+    child: Theme(
+      data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+        childrenPadding: const EdgeInsets.fromLTRB(
+          AppSpacing.sm,
+          0,
+          AppSpacing.sm,
+          AppSpacing.sm,
+        ),
+        leading: const Icon(Icons.help_outline, color: AppColors.primary),
+        title: Text('How to get these', style: AppTextStyles.bodyMedium),
+        children: [
+          for (final (i, step) in [
+            'On developer.safaricom.co.ke, create an app with Lipa na M-Pesa '
+                'Online.',
+            isTill
+                ? 'Go Live with the store (head office) number, your business '
+                      'name and the primary till operator ID.'
+                : 'Go Live with the Pay Bill number, your business name and '
+                      'the business administrator or manager username.',
+            'Safaricom texts that operator a code. Entering it is how your '
+                'gym approves SWETO.',
+            'Copy the app\'s consumer key, consumer secret and passkey here.',
+          ].indexed)
+            Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${i + 1}. ', style: AppTextStyles.bodySmall),
+                  Expanded(child: Text(step, style: AppTextStyles.bodySmall)),
+                ],
+              ),
+            ),
+        ],
+      ),
     ),
   );
 }

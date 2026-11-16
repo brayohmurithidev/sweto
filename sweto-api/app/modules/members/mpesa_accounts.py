@@ -54,6 +54,17 @@ class MpesaAccounts:
             raise InvalidMembershipPaymentError(
                 "Enter the passkey Safaricom gave you for this shortcode."
             )
+        if (payload.consumer_key is None) != (payload.consumer_secret is None):
+            raise InvalidMembershipPaymentError(
+                "Enter both the consumer key and the consumer secret."
+            )
+        has_keys = payload.consumer_key is not None or (
+            row is not None and row.consumer_key_encrypted is not None
+        )
+        if not has_keys and not self._sweto_app_available():
+            raise InvalidMembershipPaymentError(
+                "Enter the consumer key and secret from your gym's Daraja app."
+            )
         if row is None:
             row = GymMpesaAccount(gym_id=gym_id)
             self.session.add(row)
@@ -66,6 +77,11 @@ class MpesaAccounts:
         )
         if payload.passkey is not None:
             row.passkey_encrypted = cipher.encrypt(payload.passkey.strip())
+        if payload.consumer_key is not None and payload.consumer_secret is not None:
+            row.consumer_key_encrypted = cipher.encrypt(payload.consumer_key.strip())
+            row.consumer_secret_encrypted = cipher.encrypt(
+                payload.consumer_secret.strip()
+            )
         row.updated_by_user_id = user_id
         await self.session.commit()
         await self.session.refresh(row)
@@ -76,11 +92,30 @@ class MpesaAccounts:
 
         row = await self._row(gym_id)
         if row is not None:
+            cipher = self._cipher()
+            has_keys = (
+                row.consumer_key_encrypted is not None
+                and row.consumer_secret_encrypted is not None
+            )
+            if not has_keys and not self._sweto_app_available():
+                raise MpesaNotConfiguredError(
+                    "Add your gym's Daraja app keys first: More → M-Pesa till."
+                )
             return MpesaAccount(
                 shortcode=row.shortcode,
-                passkey=self._cipher().decrypt(row.passkey_encrypted),
+                passkey=cipher.decrypt(row.passkey_encrypted),
                 transaction_type=TRANSACTION_TYPES[row.account_type],
                 party_b=row.party_b,
+                consumer_key=(
+                    cipher.decrypt(row.consumer_key_encrypted)
+                    if row.consumer_key_encrypted
+                    else None
+                ),
+                consumer_secret=(
+                    cipher.decrypt(row.consumer_secret_encrypted)
+                    if row.consumer_secret_encrypted
+                    else None
+                ),
             )
         fallback = default_mpesa_account(self.settings)
         if fallback is None:
@@ -88,6 +123,18 @@ class MpesaAccounts:
                 "Add your M-Pesa till first: More → M-Pesa till."
             )
         return fallback
+
+    def _sweto_app_available(self) -> bool:
+        """Whether SWETO's own Daraja app can stand in for a gym's (any
+        mode but production, when its keys are set)."""
+
+        if self.settings.mpesa_mode == "simulated":
+            return True
+        key, secret = (
+            self.settings.mpesa_consumer_key,
+            self.settings.mpesa_consumer_secret,
+        )
+        return bool(key and secret)
 
     def _cipher(self) -> PasskeyCipher:
         key = self.settings.mpesa_credentials_key
@@ -112,6 +159,7 @@ class MpesaAccounts:
             shortcode=row.shortcode,
             till_number=row.party_b if row.account_type == "till" else None,
             passkey_saved=True,
+            app_keys_saved=row.consumer_key_encrypted is not None,
             updated_at=row.updated_at,
             mode=self.settings.mpesa_mode,
         )

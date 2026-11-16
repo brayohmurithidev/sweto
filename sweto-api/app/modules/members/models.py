@@ -340,6 +340,15 @@ class GymMpesaAccount(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     # Till number for Buy Goods; the shortcode itself for Pay Bill.
     party_b: Mapped[str] = mapped_column(String(10), nullable=False)
     passkey_encrypted: Mapped[str] = mapped_column(String(512), nullable=False)
+    # The gym's own Daraja app (Safaricom binds an app to one shortcode).
+    # Null on rows saved before this, which then use SWETO's app outside
+    # production.
+    consumer_key_encrypted: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
+    consumer_secret_encrypted: Mapped[str | None] = mapped_column(
+        String(512), nullable=True
+    )
     updated_by_user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )

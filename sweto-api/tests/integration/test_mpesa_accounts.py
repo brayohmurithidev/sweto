@@ -16,11 +16,15 @@ from tests.integration.test_mpesa import FakeGateway, member_with_plan, request
 
 pytestmark = pytest.mark.usefixtures("pinned_clock")
 PASSKEY = "bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919"
+CONSUMER_KEY = "gymOwnDarajaAppConsumerKey0123"
+CONSUMER_SECRET = "gymOwnDarajaAppConsumerSecret456"
 TILL = {
     "account_type": "till",
     "shortcode": "7654321",
     "till_number": "5123456",
     "passkey": PASSKEY,
+    "consumer_key": CONSUMER_KEY,
+    "consumer_secret": CONSUMER_SECRET,
 }
 
 
@@ -62,7 +66,15 @@ async def test_the_owner_saves_a_till_and_the_passkey_stays_secret(
         "5123456",
     )
     assert data["passkey_saved"] is True
-    assert PASSKEY not in saved.text
+    assert data["app_keys_saved"] is True
+    for secret in (PASSKEY, CONSUMER_KEY, CONSUMER_SECRET):
+        assert secret not in saved.text
+    [(key_stored, secret_stored)] = await api.sql(
+        "SELECT consumer_key_encrypted, consumer_secret_encrypted "
+        "FROM gym_mpesa_accounts"
+    )
+    assert CONSUMER_KEY not in str(key_stored)
+    assert CONSUMER_SECRET not in str(secret_stored)
     [(stored,)] = await api.sql("SELECT passkey_encrypted FROM gym_mpesa_accounts")
     assert PASSKEY not in str(stored)
     key = api.settings.mpesa_credentials_key
@@ -73,11 +85,22 @@ async def test_the_owner_saves_a_till_and_the_passkey_stays_secret(
 
     # Later saves can leave the passkey out to keep it.
     moved = await save(
-        owner, gym_id, {**TILL, "till_number": "5999999", "passkey": None}
+        owner,
+        gym_id,
+        {
+            **TILL,
+            "till_number": "5999999",
+            "passkey": None,
+            "consumer_key": None,
+            "consumer_secret": None,
+        },
     )
     assert moved.json()["data"]["till_number"] == "5999999"
-    [(kept,)] = await api.sql("SELECT passkey_encrypted FROM gym_mpesa_accounts")
-    assert kept == stored
+    assert moved.json()["data"]["app_keys_saved"] is True
+    [(kept, key_kept)] = await api.sql(
+        "SELECT passkey_encrypted, consumer_key_encrypted FROM gym_mpesa_accounts"
+    )
+    assert (kept, key_kept) == (stored, key_stored)
 
 
 async def test_invalid_tills_are_refused(
@@ -88,11 +111,20 @@ async def test_invalid_tills_are_refused(
     no_till = await save(owner, gym_id, {**TILL, "till_number": None})
     letters = await save(owner, gym_id, {**TILL, "shortcode": "ABC123"})
     no_passkey = await save(owner, gym_id, {**TILL, "passkey": None})
+    # Production without SWETO's own app: each gym brings its Daraja keys.
+    no_keys = await save(
+        owner, gym_id, {**TILL, "consumer_key": None, "consumer_secret": None}
+    )
+    half_keys = await save(owner, gym_id, {**TILL, "consumer_secret": None})
 
     assert no_till.status_code == 422
     assert letters.status_code == 422
     assert no_passkey.status_code == 422
     assert no_passkey.json()["error"]["code"] == "INVALID_MEMBERSHIP_PAYMENT"
+    assert no_keys.status_code == 422
+    assert "Daraja app" in no_keys.json()["error"]["message"]
+    assert half_keys.status_code == 422
+    assert "both" in half_keys.json()["error"]["message"]
 
 
 async def test_only_the_owner_changes_where_money_goes(
@@ -139,6 +171,31 @@ async def test_prompts_go_to_the_gyms_own_till(
         "CustomerBuyGoodsOnline",
     )
     assert account.passkey == PASSKEY
+    # Each gym's prompts go through that gym's own Daraja app.
+    assert (account.consumer_key, account.consumer_secret) == (
+        CONSUMER_KEY,
+        CONSUMER_SECRET,
+    )
+
+
+async def test_tills_saved_before_app_keys_ask_for_them_in_production(
+    api: IntegrationAPI, storage: FakeStorage, gateway: FakeGateway
+) -> None:
+    owner, gym_id, member_id, plans = await member_with_plan(api, storage)
+    await save(owner, gym_id, TILL)
+    # As a till saved before gyms had their own Daraja apps.
+    await api.sql(
+        "UPDATE gym_mpesa_accounts "
+        "SET consumer_key_encrypted = NULL, consumer_secret_encrypted = NULL"
+    )
+
+    refused = await request(owner, gym_id, member_id, plans["Monthly"])
+
+    assert refused.status_code == 503
+    assert "Daraja app keys" in refused.json()["error"]["message"]
+    assert gateway.pushes == []
+    data = (await owner.call("GET", f"/gyms/{gym_id}/mpesa-account")).json()["data"]
+    assert data["app_keys_saved"] is False
 
 
 async def test_reconcile_queries_with_the_gyms_till(
@@ -168,3 +225,4 @@ async def test_reconcile_queries_with_the_gyms_till(
         "7654321",
         "CustomerPayBillOnline",
     )
+    assert account.consumer_key == CONSUMER_KEY

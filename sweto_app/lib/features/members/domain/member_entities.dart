@@ -324,6 +324,7 @@ class MpesaTill {
     this.shortcode,
     this.tillNumber,
     this.passkeySaved = false,
+    this.appKeysSaved = false,
   });
 
   final bool configured;
@@ -334,6 +335,9 @@ class MpesaTill {
   final String? shortcode;
   final String? tillNumber;
   final bool passkeySaved;
+
+  /// The gym's own Daraja app consumer key and secret are saved.
+  final bool appKeysSaved;
 
   bool get isLive => mode == 'production';
 }

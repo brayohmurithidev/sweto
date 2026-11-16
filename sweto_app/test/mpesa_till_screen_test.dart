@@ -11,7 +11,7 @@ const _passkey =
     'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919';
 
 Future<void> _pump(WidgetTester tester, FakeMembers repo) async {
-  tester.view.physicalSize = const Size(1170, 2532);
+  tester.view.physicalSize = const Size(1170, 4200);
   tester.view.devicePixelRatio = 3;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
@@ -23,8 +23,15 @@ Future<void> _pump(WidgetTester tester, FakeMembers repo) async {
   await tester.pumpAndSettle();
 }
 
-Future<void> _enter(WidgetTester tester, String key, String text) =>
-    tester.enterText(find.byKey(Key(key)), text);
+Future<void> _enter(WidgetTester tester, String key, String text) async {
+  await tester.ensureVisible(find.byKey(Key(key)));
+  await tester.enterText(find.byKey(Key(key)), text);
+}
+
+Future<void> _tapSave(WidgetTester tester) async {
+  await tester.ensureVisible(find.byKey(const Key('till-save')));
+  await tester.tap(find.byKey(const Key('till-save')));
+}
 
 void main() {
   testWidgets('a new till needs every number and the passkey', (tester) async {
@@ -32,14 +39,14 @@ void main() {
     await _pump(tester, repo);
     expect(find.byKey(const Key('till-test-mode')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('till-save')));
+    await _tapSave(tester);
     await tester.pump();
     expect(find.text('Enter the 5 to 7 digit number.'), findsOneWidget);
     expect(find.text('Enter the 5 to 7 digit till number.'), findsOneWidget);
     expect(find.text('Enter the passkey from Safaricom.'), findsOneWidget);
 
     await _enter(tester, 'till-passkey', 'short');
-    await tester.tap(find.byKey(const Key('till-save')));
+    await _tapSave(tester);
     await tester.pump();
     expect(find.text('That passkey looks too short.'), findsOneWidget);
     expect(repo.tillSaves, isEmpty);
@@ -60,7 +67,7 @@ void main() {
           .obscureText,
       isTrue,
     );
-    await tester.tap(find.byKey(const Key('till-save')));
+    await _tapSave(tester);
     await tester.pump();
 
     expect(repo.tillSaves.single, {
@@ -68,6 +75,8 @@ void main() {
       'shortcode': '7654321',
       'tillNumber': '5123456',
       'passkey': _passkey,
+      'consumerKey': null,
+      'consumerSecret': null,
     });
     expect(find.text('M-Pesa till saved.'), findsOneWidget);
     expect(
@@ -89,6 +98,7 @@ void main() {
         mode: 'production',
         shortcode: '888880',
         passkeySaved: true,
+        appKeysSaved: true,
       );
     await _pump(tester, repo);
 
@@ -97,10 +107,64 @@ void main() {
     expect(find.text('Pay Bill number'), findsOneWidget);
     expect(find.text('888880'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('till-save')));
+    await _tapSave(tester);
     await tester.pump();
     expect(repo.tillSaves.single['passkey'], isNull);
+    expect(repo.tillSaves.single['consumerKey'], isNull);
     expect(repo.tillSaves.single['isTill'], isFalse);
+    expect(find.text('Consumer secret (saved)'), findsOneWidget);
+  });
+
+  testWidgets('live M-Pesa needs the gym\'s own Daraja app keys', (
+    tester,
+  ) async {
+    final repo = FakeMembers()
+      ..till = const MpesaTill(configured: false, mode: 'production');
+    await _pump(tester, repo);
+
+    await _enter(tester, 'till-shortcode', '7654321');
+    await _enter(tester, 'till-number', '5123456');
+    await _enter(tester, 'till-passkey', _passkey);
+    await _tapSave(tester);
+    await tester.pump();
+    expect(
+      find.text('Enter the consumer key and secret from your Daraja app.'),
+      findsOneWidget,
+    );
+
+    await _enter(tester, 'till-consumer-key', 'gymOwnAppKey0123456');
+    await _tapSave(tester);
+    await tester.pump();
+    expect(
+      find.text('Enter both the consumer key and the consumer secret.'),
+      findsOneWidget,
+    );
+    expect(repo.tillSaves, isEmpty);
+
+    await _enter(tester, 'till-consumer-secret', 'gymOwnAppSecret98765');
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('till-consumer-secret')))
+          .obscureText,
+      isTrue,
+    );
+    await _tapSave(tester);
+    await tester.pump();
+
+    expect(repo.tillSaves.single['consumerKey'], 'gymOwnAppKey0123456');
+    expect(repo.tillSaves.single['consumerSecret'], 'gymOwnAppSecret98765');
+    expect(find.text('Consumer key (saved)'), findsOneWidget);
+  });
+
+  testWidgets('the go-live steps follow the account type', (tester) async {
+    await _pump(tester, FakeMembers());
+    await tester.tap(find.text('How to get these'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('primary till operator'), findsOneWidget);
+
+    await tester.tap(find.text('Pay Bill'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('administrator or manager'), findsOneWidget);
   });
 
   testWidgets('a manager is told only the owner can change it', (tester) async {
@@ -113,7 +177,7 @@ void main() {
     await _enter(tester, 'till-shortcode', '7654321');
     await _enter(tester, 'till-number', '5123456');
     await _enter(tester, 'till-passkey', _passkey);
-    await tester.tap(find.byKey(const Key('till-save')));
+    await _tapSave(tester);
     await tester.pump();
 
     expect(

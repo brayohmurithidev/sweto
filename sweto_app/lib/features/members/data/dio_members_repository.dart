@@ -354,6 +354,8 @@ class DioMembersRepository implements MembersRepository {
     required String shortcode,
     String? tillNumber,
     String? passkey,
+    String? consumerKey,
+    String? consumerSecret,
   }) async {
     final r = await _dio.put<Map<String, dynamic>>(
       ApiEndpoints.gymMpesaAccount(gymId),
@@ -362,6 +364,8 @@ class DioMembersRepository implements MembersRepository {
         'shortcode': shortcode,
         if (isTill) 'till_number': tillNumber,
         'passkey': ?passkey,
+        'consumer_key': ?consumerKey,
+        'consumer_secret': ?consumerSecret,
       },
     );
     return _till(_data(r.data));
@@ -374,6 +378,7 @@ class DioMembersRepository implements MembersRepository {
     shortcode: d['shortcode'] as String?,
     tillNumber: d['till_number'] as String?,
     passkeySaved: d['passkey_saved'] == true,
+    appKeysSaved: d['app_keys_saved'] == true,
   );
 
   MemberDetail _detail(Map<String, dynamic> d) => MemberDetail(
